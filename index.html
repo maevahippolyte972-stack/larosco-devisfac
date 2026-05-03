@@ -375,7 +375,7 @@
       <button class="modal-close" id="modal-close-btn">×</button>
     </div>
     <div class="modal-body" id="modal-devis-body"></div>
-    <div class="modal-footer">
+    <div class="modal-footer-wrap">
       <select id="modal-devis-statut" class="select-input">
         <option value="brouillon">Brouillon</option>
         <option value="envoye">Envoyé</option>
@@ -383,7 +383,11 @@
         <option value="refuse">Refusé</option>
         <option value="expire">Expiré</option>
       </select>
-      <button class="btn-primary" id="btn-convert-facture">→ Convertir en facture</button>
+      <div class="modal-footer-actions">
+        <button class="btn-icon-danger" id="btn-delete-devis" title="Supprimer">🗑️</button>
+        <button class="btn-secondary" id="btn-edit-devis">✏️ Modifier</button>
+        <button class="btn-primary" id="btn-convert-facture">→ Convertir en facture</button>
+      </div>
     </div>
   </div>
 </div>
@@ -397,9 +401,60 @@
       <button class="modal-close" id="modal-client-close-btn">×</button>
     </div>
     <div class="modal-body" id="modal-client-body"></div>
+    <div class="modal-footer-wrap">
+      <div class="modal-footer-actions">
+        <button class="btn-icon-danger" id="btn-delete-client" title="Supprimer">🗑️</button>
+        <button class="btn-secondary" id="btn-edit-client">✏️ Modifier</button>
+      </div>
+      <div class="modal-footer-actions">
+        <button class="btn-secondary" id="btn-client-new-devis">+ Devis</button>
+        <button class="btn-primary" id="btn-client-new-facture">+ Facture</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ MODAL DÉTAIL FACTURE ═══════════════ -->
+<div id="modal-facture" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3 id="modal-facture-num">Facture</h3>
+      <button class="modal-close" id="modal-facture-close-btn">×</button>
+    </div>
+    <div class="modal-body" id="modal-facture-body"></div>
+    <div class="modal-footer-wrap">
+      <select id="modal-facture-statut" class="select-input">
+        <option value="impaye">Impayé</option>
+        <option value="partiel">Paiement partiel</option>
+        <option value="paye">Payé</option>
+      </select>
+      <div class="modal-footer-actions">
+        <button class="btn-icon-danger" id="btn-delete-facture" title="Supprimer">🗑️</button>
+        <button class="btn-secondary" id="btn-edit-facture">✏️ Modifier</button>
+        <button class="btn-primary" id="btn-regenerate-facture-pdf">📄 Re-télécharger PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL ÉDITION CLIENT ═══════════════ -->
+<div id="modal-edit-client" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3>Modifier le client</h3>
+      <button class="modal-close" id="modal-edit-client-close">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field"><span>Nom</span><input type="text" id="edit-client-nom"></label>
+      <label class="field"><span>Téléphone</span><input type="tel" id="edit-client-tel"></label>
+      <label class="field"><span>Adresse</span><input type="text" id="edit-client-adresse"></label>
+      <label class="field"><span>Commune</span><input type="text" id="edit-client-commune"></label>
+      <label class="field"><span>Email</span><input type="email" id="edit-client-email"></label>
+    </div>
     <div class="modal-footer">
-      <button class="btn-secondary" id="btn-client-new-devis">+ Devis</button>
-      <button class="btn-primary" id="btn-client-new-facture">+ Facture</button>
+      <button class="btn-secondary" id="btn-cancel-edit-client">Annuler</button>
+      <button class="btn-primary" id="btn-save-edit-client">Enregistrer</button>
     </div>
   </div>
 </div>
