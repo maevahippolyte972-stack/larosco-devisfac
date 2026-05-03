@@ -703,3 +703,131 @@ html, body {
 }
 .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
 .empty-state .text { font-size: 14px; }
+
+
+/* ═════ MODAL ═════ */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 200;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+.modal.show { display: flex; animation: fadeIn 0.2s; }
+.modal-content {
+  background: var(--bg-2);
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  border-radius: 18px 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: none; } }
+.modal-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--bg-2);
+}
+.modal-head h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.modal-close {
+  background: var(--bg-3);
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--text);
+  font-size: 22px;
+  cursor: pointer;
+}
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-footer {
+  padding: 14px 20px calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 10px;
+}
+
+.modal-section {
+  margin-bottom: 16px;
+}
+.modal-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 4px;
+}
+.modal-value {
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 500;
+}
+.modal-prest-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+.modal-prest-row:last-child { border-bottom: none; }
+.modal-prest-row .ref { color: var(--accent); font-weight: 700; font-size: 11px; }
+.modal-prest-row .desig { color: var(--text); margin-top: 2px; }
+.modal-prest-row .price { color: var(--text-2); white-space: nowrap; margin-left: 12px; }
+
+/* ═════ SELECT ═════ */
+.select-input {
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  color: var(--text);
+  font-size: 16px;
+  width: 100%;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23B8B8B8' stroke-width='2'%3e%3cpath d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+}
+.select-input:focus { outline: none; border-color: var(--accent); }
+
+/* ═════ FROM-DEVIS BANNER ═════ */
+.from-devis-banner {
+  background: linear-gradient(135deg, var(--accent), #C75A09);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: white;
+}
+.from-devis-banner strong { font-size: 14px; font-weight: 700; }
+.from-devis-banner small { font-size: 12px; opacity: 0.85; }
+
+/* ═════ STATUS BADGE in liste ═════ */
+.status-brouillon { background: rgba(180,180,180,0.2); color: var(--text-2); }
+.status-envoye { background: rgba(243,156,18,0.2); color: var(--yellow); }
+.status-accepte { background: rgba(39,174,96,0.2); color: var(--green); }
+.status-refuse { background: rgba(192,57,43,0.2); color: var(--red); }
+.status-expire { background: rgba(180,180,180,0.2); color: var(--text-3); }
