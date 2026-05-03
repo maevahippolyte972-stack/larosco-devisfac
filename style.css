@@ -831,3 +831,76 @@ html, body {
 .status-accepte { background: rgba(39,174,96,0.2); color: var(--green); }
 .status-refuse { background: rgba(192,57,43,0.2); color: var(--red); }
 .status-expire { background: rgba(180,180,180,0.2); color: var(--text-3); }
+
+
+/* ═════ FICHE CLIENT — STATS GRID ═════ */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.stat-box {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ═════ VÉHICULES dans modal ═════ */
+.vehicle-item {
+  background: var(--bg-3);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: border 0.15s;
+}
+.vehicle-item.vehicle-active {
+  border-color: var(--accent);
+  background: rgba(232, 103, 10, 0.1);
+}
+.badge-dernier {
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* ═════ STATUS MINI BADGE ═════ */
+.status-mini {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.status-mini.status-brouillon { background: rgba(180,180,180,0.2); color: var(--text-2); }
+.status-mini.status-envoye { background: rgba(243,156,18,0.2); color: var(--yellow); }
+.status-mini.status-accepte { background: rgba(39,174,96,0.2); color: var(--green); }
+.status-mini.status-refuse { background: rgba(192,57,43,0.2); color: var(--red); }
+.status-mini.status-paye { background: rgba(39,174,96,0.2); color: var(--green); }
+.status-mini.status-impaye { background: rgba(192,57,43,0.2); color: var(--red); }
