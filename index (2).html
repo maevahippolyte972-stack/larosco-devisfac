@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Larosco">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Larosco Technics — Devis & Factures</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════ ÉCRAN LOGIN ═══════════════ -->
+<section id="screen-login" class="screen active">
+  <div class="login-wrap">
+    <div class="logo-wrap">
+      <div class="logo-mark">LT</div>
+      <h1 class="logo-text">LAROSCO<span>TECHNICS</span></h1>
+      <p class="logo-sub">Garage automobile · Case-Pilote · Martinique</p>
+    </div>
+
+    <form id="login-form" class="login-form">
+      <label>
+        <span>Email</span>
+        <input type="email" id="email" autocomplete="email" required>
+      </label>
+      <label>
+        <span>Mot de passe</span>
+        <input type="password" id="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" id="btn-login">Se connecter</button>
+      <div id="login-error" class="error"></div>
+    </form>
+
+    <div class="footer-mention">SIRET 10128189700013 · TVA 8,5% Art.296 CGI DOM</div>
+  </div>
+</section>
+
+<!-- ═══════════════ ÉCRAN ACCUEIL ═══════════════ -->
+<section id="screen-home" class="screen">
+  <header class="topbar">
+    <div class="brand-mini">LAROSCO<span>TECHNICS</span></div>
+    <button class="icon-btn" id="btn-logout" aria-label="Déconnexion">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+    </button>
+  </header>
+
+  <main class="page">
+    <h2 class="page-title">Tableau de bord</h2>
+    <p class="page-sub">Activité du mois</p>
+
+    <div class="kpi-grid">
+      <div class="kpi kpi-primary">
+        <div class="kpi-label">CA du mois</div>
+        <div class="kpi-value" id="kpi-ca">— €</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Devis en attente</div>
+        <div class="kpi-value" id="kpi-devis">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Factures impayées</div>
+        <div class="kpi-value kpi-warn" id="kpi-impaye">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Clients</div>
+        <div class="kpi-value" id="kpi-clients">—</div>
+      </div>
+    </div>
+
+    <div class="action-grid">
+      <button class="action-btn action-primary" data-screen="new-devis">
+        <span class="action-icon">+</span>
+        <span class="action-label">Nouveau devis</span>
+      </button>
+      <button class="action-btn action-primary" data-screen="new-facture">
+        <span class="action-icon">€</span>
+        <span class="action-label">Nouvelle facture</span>
+      </button>
+      <button class="action-btn" data-screen="liste-devis">
+        <span class="action-icon">📋</span>
+        <span class="action-label">Devis</span>
+      </button>
+      <button class="action-btn" data-screen="liste-factures">
+        <span class="action-icon">🧾</span>
+        <span class="action-label">Factures</span>
+      </button>
+      <button class="action-btn" data-screen="clients">
+        <span class="action-icon">👥</span>
+        <span class="action-label">Clients</span>
+      </button>
+      <button class="action-btn" data-screen="tarifs">
+        <span class="action-icon">💰</span>
+        <span class="action-label">Tarifs</span>
+      </button>
+    </div>
+  </main>
+</section>
+
+<!-- ═══════════════ ÉCRAN NOUVEAU DEVIS ═══════════════ -->
+<section id="screen-new-devis" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <div class="topbar-title" id="devis-title">Nouveau devis</div>
+    <div style="width:32px"></div>
+  </header>
+
+  <main class="page">
+    <!-- Bloc CLIENT -->
+    <div class="card">
+      <div class="card-head">CLIENT</div>
+      <div class="card-body">
+        <label class="field">
+          <span>Nom du client</span>
+          <input type="text" id="d-client-nom" placeholder="Nom Prénom">
+        </label>
+        <div class="row-2">
+          <label class="field">
+            <span>Téléphone</span>
+            <input type="tel" id="d-client-tel" placeholder="0696...">
+          </label>
+          <label class="field">
+            <span>Commune</span>
+            <input type="text" id="d-client-commune" placeholder="Case-Pilote">
+          </label>
+        </div>
+        <label class="field">
+          <span>Adresse</span>
+          <input type="text" id="d-client-adresse">
+        </label>
+      </div>
+    </div>
+
+    <!-- Bloc VÉHICULE -->
+    <div class="card">
+      <div class="card-head">VÉHICULE</div>
+      <div class="card-body">
+        <label class="field">
+          <span>Marque & Modèle</span>
+          <input type="text" id="d-vehicule" placeholder="Citroën C3, BMW Série 3...">
+        </label>
+        <div class="row-2">
+          <label class="field">
+            <span>Immatriculation</span>
+            <input type="text" id="d-immat" placeholder="AB-123-CD" style="text-transform:uppercase">
+          </label>
+          <label class="field">
+            <span>Kilométrage</span>
+            <input type="number" id="d-km" placeholder="0">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloc GRILLE -->
+    <div class="card">
+      <div class="card-head">GRILLE TARIFAIRE</div>
+      <div class="card-body">
+        <div class="grille-selector">
+          <button type="button" class="grille-btn active" data-grille="B">
+            <strong>B</strong>
+            <small>Standard<br>FR / Toyota / Hyundai / Kia</small>
+          </button>
+          <button type="button" class="grille-btn" data-grille="C">
+            <strong>C</strong>
+            <small>Intermédiaire<br>VAG / Honda / Nissan / US</small>
+          </button>
+          <button type="button" class="grille-btn" data-grille="D">
+            <strong>D</strong>
+            <small>Premium<br>BMW (auto si réf BMW)</small>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloc PRESTATIONS -->
+    <div class="card">
+      <div class="card-head">
+        <span>PRESTATIONS</span>
+        <button class="card-add" id="btn-add-prestation">+ Ajouter</button>
+      </div>
+      <div class="card-body" id="prestations-list">
+        <!-- Lignes ajoutées dynamiquement -->
+      </div>
+    </div>
+
+    <!-- Bloc PIÈCES -->
+    <div class="card">
+      <div class="card-head">PIÈCES / FOURNITURES</div>
+      <div class="card-body">
+        <label class="field">
+          <span>Montant pièces fournies par le client (€)</span>
+          <input type="number" id="d-pieces" placeholder="0" value="0" step="0.01">
+        </label>
+      </div>
+    </div>
+
+    <!-- Bloc REMISE -->
+    <div class="card">
+      <div class="card-head">REMISE GLOBALE</div>
+      <div class="card-body">
+        <div class="remise-quick">
+          <button type="button" class="rem-btn" data-rem="0">0%</button>
+          <button type="button" class="rem-btn" data-rem="5">5%</button>
+          <button type="button" class="rem-btn" data-rem="10">10%</button>
+          <button type="button" class="rem-btn" data-rem="15">15%</button>
+          <button type="button" class="rem-btn" data-rem="20">20%</button>
+          <button type="button" class="rem-btn" data-rem="25">25%</button>
+          <button type="button" class="rem-btn" data-rem="30">30%</button>
+        </div>
+        <label class="field">
+          <span>Pourcentage personnalisé (%)</span>
+          <input type="number" id="d-remise" min="0" max="100" value="0" step="1">
+        </label>
+      </div>
+    </div>
+
+    <!-- Bloc TOTAUX -->
+    <div class="card totals-card">
+      <div class="card-body">
+        <div class="total-row"><span>Total HT MO</span><span id="t-mo">0,00 €</span></div>
+        <div class="total-row"><span>Pièces</span><span id="t-pieces">0,00 €</span></div>
+        <div class="total-row"><span>Sous-total HT</span><span id="t-ht">0,00 €</span></div>
+        <div class="total-row"><span>TVA 8,5%</span><span id="t-tva">0,00 €</span></div>
+        <div class="total-row" id="row-remise" style="display:none">
+          <span>Remise <span id="t-remise-pct">0%</span></span>
+          <span id="t-remise" class="negative">-0,00 €</span>
+        </div>
+        <div class="total-row total-final"><span>TOTAL TTC</span><span id="t-ttc">0,00 €</span></div>
+      </div>
+    </div>
+
+    <div class="actions-bottom">
+      <button class="btn-secondary" id="btn-save-draft">Enregistrer brouillon</button>
+      <button class="btn-primary" id="btn-generate-pdf">Générer PDF</button>
+    </div>
+  </main>
+</section>
+
+<!-- ═══════════════ AUTRES ÉCRANS (placeholders) ═══════════════ -->
+<section id="screen-liste-devis" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    <div class="topbar-title">Devis</div><div style="width:32px"></div>
+  </header>
+  <main class="page"><div id="devis-list-container"></div></main>
+</section>
+
+<section id="screen-liste-factures" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    <div class="topbar-title">Factures</div><div style="width:32px"></div>
+  </header>
+  <main class="page"><div id="factures-list-container"></div></main>
+</section>
+
+<section id="screen-clients" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    <div class="topbar-title">Clients</div><div style="width:32px"></div>
+  </header>
+  <main class="page"><div id="clients-list-container"></div></main>
+</section>
+
+<section id="screen-tarifs" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    <div class="topbar-title">Base tarifs</div><div style="width:32px"></div>
+  </header>
+  <main class="page">
+    <input type="search" id="tarifs-search" class="search-input" placeholder="Rechercher une référence...">
+    <div id="tarifs-list-container"></div>
+  </main>
+</section>
+
+<!-- ═══════════════ TOAST NOTIFICATION ═══════════════ -->
+<div id="toast" class="toast"></div>
+
+<!-- Supabase + jsPDF -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
