@@ -169,18 +169,36 @@ async function prefillFactureFromDevis(devis) {
     }
   }
 
+  // Véhicule (depuis colonnes du devis)
+  document.getElementById('f-vehicule').value = devis.vehicule_nom || '';
+  document.getElementById('f-immat').value = devis.vehicule_immat || '';
+  document.getElementById('f-km').value = devis.vehicule_km || '';
+
   // Pieces / remise
   document.getElementById('f-pieces').value = state.currentFacture.pieces;
   document.getElementById('f-remise').value = state.currentFacture.remise_pct;
+
+  // Marquer le bon bouton remise rapide actif
+  document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.rem) === state.currentFacture.remise_pct);
+  });
 
   // Grille
   document.querySelectorAll('#screen-new-facture .grille-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.grille === devis.grille));
 
-  // Lignes prestations
+  // Vider les anciennes lignes puis ajouter celles du devis
+  document.getElementById('prestations-list-f').innerHTML = '';
   for (const lig of (devis.lignes || [])) {
     addPrestationRow('f', lig);
   }
+
+  // Date facture = aujourd'hui, échéance = +30j
+  const today = new Date().toISOString().split('T')[0];
+  const ech = new Date();
+  ech.setDate(ech.getDate() + 30);
+  document.getElementById('f-date').value = today;
+  document.getElementById('f-echeance').value = ech.toISOString().split('T')[0];
 
   updateTotals('f');
   toast('Facture pré-remplie depuis ' + devis.numero, 'success');
@@ -594,7 +612,8 @@ async function generatePDF(type) {
       mode_reglement: modeReglement, observations,
       lignes, total_ht: sousHt, pieces,
       remise_pct: remisePct, remise_montant: remiseMontant,
-      tva, total_ttc: ttc, statut_paiement: 'impaye'
+      tva, total_ttc: ttc, statut_paiement: 'impaye',
+      vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
     });
     // Si vient d'un devis, marquer celui-ci comme accepté
     if (state.currentFacture.source_devis_id) {
@@ -606,7 +625,8 @@ async function generatePDF(type) {
       grille: state.currentDevis.grille, lignes,
       total_ht: sousHt, pieces, remise_pct: remisePct,
       remise_montant: remiseMontant, tva, total_ttc: ttc,
-      statut: 'envoye'
+      statut: 'envoye',
+      vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
     });
   }
 
@@ -694,15 +714,230 @@ async function loadFacturesList() {
 async function loadClientsList() {
   const c = document.getElementById('clients-list-container');
   c.innerHTML = '<div class="empty-state">Chargement…</div>';
-  const { data } = await sb.from('clients').select('*').order('nom').limit(100);
-  c.innerHTML = (data || []).map(cl => `
-    <div class="doc-item">
-      <div>
-        <div class="doc-num">${cl.nom}</div>
-        <div class="doc-client">${cl.telephone || '—'} ${cl.commune ? '· ' + cl.commune : ''}</div>
+  const { data } = await sb.from('clients').select('*').order('nom').limit(200);
+
+  // Recherche
+  const search = document.getElementById('clients-search');
+  let allClients = data || [];
+
+  function renderClients(filter = '') {
+    const q = filter.toLowerCase().trim();
+    const filtered = q
+      ? allClients.filter(cl => (cl.nom || '').toLowerCase().includes(q) || (cl.telephone || '').includes(q) || (cl.commune || '').toLowerCase().includes(q))
+      : allClients;
+    c.innerHTML = filtered.map(cl => `
+      <div class="doc-item" data-client-id="${cl.id}">
+        <div style="flex:1">
+          <div class="doc-num">${cl.nom}</div>
+          <div class="doc-client">${cl.telephone || '—'} ${cl.commune ? '· ' + cl.commune : ''}</div>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    `).join('') || '<div class="empty-state"><div class="icon">👥</div><div class="text">Aucun client</div></div>';
+
+    c.querySelectorAll('.doc-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const id = parseInt(item.dataset.clientId);
+        const cl = allClients.find(x => x.id === id);
+        if (cl) openClientModal(cl);
+      });
+    });
+  }
+
+  renderClients();
+  if (search) {
+    search.value = '';
+    search.oninput = (e) => renderClients(e.target.value);
+  }
+}
+
+// ═══════════ MODAL CLIENT ═══════════
+let currentModalClient = null;
+let currentModalClientLastVehicle = null;
+
+async function openClientModal(client) {
+  currentModalClient = client;
+  document.getElementById('modal-client-nom').textContent = client.nom;
+  document.getElementById('modal-client-body').innerHTML = '<div class="empty-state">Chargement…</div>';
+  document.getElementById('modal-client').classList.add('show');
+
+  // Récupérer en parallèle : devis et factures du client
+  const [devisRes, factRes] = await Promise.all([
+    sb.from('devis').select('*').eq('client_id', client.id).order('date_emission', { ascending: false }),
+    sb.from('factures').select('*').eq('client_id', client.id).order('date_emission', { ascending: false })
+  ]);
+  const devis = devisRes.data || [];
+  const factures = factRes.data || [];
+
+  // Statistiques
+  const nbInterventions = factures.length;
+  const caTotal = factures.reduce((s, f) => s + (parseFloat(f.total_ttc) || 0), 0);
+  const panierMoyen = nbInterventions > 0 ? caTotal / nbInterventions : 0;
+  const lastVisit = factures[0]?.date_emission || devis[0]?.date_emission;
+
+  // Véhicules uniques (depuis devis + factures)
+  const vehiculesMap = new Map();
+  [...devis, ...factures].forEach(d => {
+    if (d.vehicule_immat) {
+      vehiculesMap.set(d.vehicule_immat, {
+        nom: d.vehicule_nom,
+        immat: d.vehicule_immat,
+        km: d.vehicule_km,
+        last_seen: d.date_emission
+      });
+    }
+  });
+  const vehicules = Array.from(vehiculesMap.values()).sort((a, b) =>
+    new Date(b.last_seen) - new Date(a.last_seen)
+  );
+
+  // Garder le dernier véhicule pour pré-remplissage
+  currentModalClientLastVehicle = vehicules[0] || null;
+
+  // Construire le HTML
+  let html = `
+    <div class="modal-section">
+      <div class="modal-label">Coordonnées</div>
+      <div class="modal-value">📞 ${client.telephone || '—'}</div>
+      <div class="modal-value" style="margin-top:4px">📍 ${client.adresse || '—'} ${client.commune ? '· ' + client.commune : ''}</div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-label">Statistiques</div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-value">${nbInterventions}</div>
+          <div class="stat-label">Interventions</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${formatEUR(caTotal)}</div>
+          <div class="stat-label">CA total</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${formatEUR(panierMoyen)}</div>
+          <div class="stat-label">Panier moyen</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="font-size:13px">${lastVisit ? new Date(lastVisit).toLocaleDateString('fr-FR') : '—'}</div>
+          <div class="stat-label">Dernière visite</div>
+        </div>
       </div>
     </div>
-  `).join('') || '<div class="empty-state"><div class="icon">👥</div><div class="text">Aucun client</div></div>';
+  `;
+
+  // Véhicules
+  if (vehicules.length > 0) {
+    html += `
+      <div class="modal-section">
+        <div class="modal-label">Véhicules (${vehicules.length})</div>
+        ${vehicules.map((v, idx) => `
+          <div class="vehicle-item ${idx === 0 ? 'vehicle-active' : ''}" data-vehicle-idx="${idx}">
+            <div>
+              <div style="font-weight:600">${v.nom || '—'}</div>
+              <div style="font-size:12px;color:var(--text-2)">${v.immat || '—'} ${v.km ? '· ' + v.km + ' km' : ''}</div>
+            </div>
+            ${idx === 0 ? '<span class="badge-dernier">DERNIER</span>' : ''}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Historique devis
+  if (devis.length > 0) {
+    html += `
+      <div class="modal-section">
+        <div class="modal-label">Devis (${devis.length})</div>
+        ${devis.slice(0, 10).map(d => `
+          <div class="modal-prest-row">
+            <div>
+              <div class="ref">${d.numero}</div>
+              <div class="desig">${new Date(d.date_emission).toLocaleDateString('fr-FR')} · <span class="status-mini status-${d.statut}">${d.statut}</span></div>
+            </div>
+            <div class="price">${formatEUR(d.total_ttc)}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Historique factures
+  if (factures.length > 0) {
+    html += `
+      <div class="modal-section">
+        <div class="modal-label">Factures (${factures.length})</div>
+        ${factures.slice(0, 10).map(f => {
+          const stCls = f.statut_paiement === 'paye' ? 'status-paye' : 'status-impaye';
+          return `<div class="modal-prest-row">
+            <div>
+              <div class="ref">${f.numero}</div>
+              <div class="desig">${new Date(f.date_emission).toLocaleDateString('fr-FR')} · <span class="status-mini ${stCls}">${f.statut_paiement}</span></div>
+            </div>
+            <div class="price">${formatEUR(f.total_ttc)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // Données vehicules cliquables
+  document.getElementById('modal-client-body').innerHTML = html;
+
+  // Click sur véhicule = le sélectionner
+  document.querySelectorAll('.vehicle-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.vehicle-item').forEach(v => v.classList.remove('vehicle-active'));
+      el.classList.add('vehicle-active');
+      const idx = parseInt(el.dataset.vehicleIdx);
+      currentModalClientLastVehicle = vehicules[idx];
+    });
+  });
+}
+
+document.getElementById('modal-client-close-btn').addEventListener('click', () => {
+  document.getElementById('modal-client').classList.remove('show');
+});
+document.getElementById('modal-client').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-client') {
+    document.getElementById('modal-client').classList.remove('show');
+  }
+});
+
+// Bouton + Devis depuis fiche client
+document.getElementById('btn-client-new-devis').addEventListener('click', () => {
+  if (!currentModalClient) return;
+  document.getElementById('modal-client').classList.remove('show');
+  resetDevisForm();
+  showScreen('new-devis');
+  setTimeout(() => prefillFromClient('d'), 100);
+});
+
+// Bouton + Facture depuis fiche client
+document.getElementById('btn-client-new-facture').addEventListener('click', () => {
+  if (!currentModalClient) return;
+  document.getElementById('modal-client').classList.remove('show');
+  resetFactureForm();
+  showScreen('new-facture');
+  setTimeout(() => prefillFromClient('f'), 100);
+});
+
+function prefillFromClient(prefix) {
+  const cl = currentModalClient;
+  const v = currentModalClientLastVehicle;
+  if (!cl) return;
+
+  document.getElementById(prefix + '-client-nom').value = cl.nom || '';
+  document.getElementById(prefix + '-client-tel').value = cl.telephone || '';
+  document.getElementById(prefix + '-client-commune').value = cl.commune || '';
+  document.getElementById(prefix + '-client-adresse').value = cl.adresse || '';
+
+  if (v) {
+    document.getElementById(prefix + '-vehicule').value = v.nom || '';
+    document.getElementById(prefix + '-immat').value = v.immat || '';
+    document.getElementById(prefix + '-km').value = v.km || '';
+  }
+
+  toast('Fiche ' + cl.nom + ' chargée', 'success');
 }
 
 // ═══════════ MODAL DEVIS ═══════════
@@ -728,6 +963,10 @@ function openDevisModal(devis) {
     <div class="modal-section">
       <div class="modal-label">Client</div>
       <div class="modal-value">${clientNom}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Véhicule</div>
+      <div class="modal-value">${devis.vehicule_nom || '—'} ${devis.vehicule_immat ? '· ' + devis.vehicule_immat : ''} ${devis.vehicule_km ? '· ' + devis.vehicule_km + ' km' : ''}</div>
     </div>
     <div class="modal-section">
       <div class="modal-label">Date · Grille</div>
