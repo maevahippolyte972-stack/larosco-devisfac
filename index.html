@@ -251,6 +251,140 @@
   </main>
 </section>
 
+
+<!-- ═══════════════ ÉCRAN NOUVELLE FACTURE ═══════════════ -->
+<section id="screen-new-facture" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <div class="topbar-title" id="facture-title">Nouvelle facture</div>
+    <div style="width:32px"></div>
+  </header>
+  <main class="page">
+    <div id="facture-from-devis-banner" class="from-devis-banner" style="display:none">
+      <strong>Facture créée depuis le devis <span id="facture-source-devis"></span></strong>
+      <small>Vous pouvez modifier les informations avant génération</small>
+    </div>
+    <div class="card">
+      <div class="card-head">CLIENT</div>
+      <div class="card-body">
+        <label class="field"><span>Nom</span><input type="text" id="f-client-nom"></label>
+        <div class="row-2">
+          <label class="field"><span>Téléphone</span><input type="tel" id="f-client-tel"></label>
+          <label class="field"><span>Commune</span><input type="text" id="f-client-commune"></label>
+        </div>
+        <label class="field"><span>Adresse</span><input type="text" id="f-client-adresse"></label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">VÉHICULE</div>
+      <div class="card-body">
+        <label class="field"><span>Marque & Modèle</span><input type="text" id="f-vehicule"></label>
+        <div class="row-2">
+          <label class="field"><span>Immatriculation</span><input type="text" id="f-immat" style="text-transform:uppercase"></label>
+          <label class="field"><span>Kilométrage</span><input type="number" id="f-km"></label>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">FACTURATION</div>
+      <div class="card-body">
+        <div class="row-2">
+          <label class="field"><span>Date facture</span><input type="date" id="f-date"></label>
+          <label class="field"><span>Échéance</span><input type="date" id="f-echeance"></label>
+        </div>
+        <label class="field">
+          <span>Mode de règlement</span>
+          <select id="f-reglement" class="select-input">
+            <option value="Espèces">Espèces</option>
+            <option value="CB">Carte Bancaire</option>
+            <option value="Virement">Virement bancaire</option>
+            <option value="Chèque">Chèque</option>
+          </select>
+        </label>
+        <label class="field"><span>Observations (optionnel)</span><input type="text" id="f-observations"></label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">GRILLE TARIFAIRE</div>
+      <div class="card-body">
+        <div class="grille-selector" id="f-grille-selector">
+          <button type="button" class="grille-btn active" data-grille="B"><strong>B</strong><small>Standard<br>FR / Toyota / Hyundai / Kia</small></button>
+          <button type="button" class="grille-btn" data-grille="C"><strong>C</strong><small>Intermédiaire<br>VAG / Honda / Nissan / US</small></button>
+          <button type="button" class="grille-btn" data-grille="D"><strong>D</strong><small>Premium<br>BMW (auto si réf BMW)</small></button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span>PRESTATIONS</span>
+        <button class="card-add" id="btn-add-prestation-f">+ Ajouter</button>
+      </div>
+      <div class="card-body" id="prestations-list-f"></div>
+    </div>
+    <div class="card">
+      <div class="card-head">PIÈCES / FOURNITURES</div>
+      <div class="card-body">
+        <label class="field"><span>Montant pièces (€)</span><input type="number" id="f-pieces" value="0" step="0.01"></label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">REMISE</div>
+      <div class="card-body">
+        <div class="remise-quick" id="f-remise-quick">
+          <button type="button" class="rem-btn" data-rem="0">0%</button>
+          <button type="button" class="rem-btn" data-rem="5">5%</button>
+          <button type="button" class="rem-btn" data-rem="10">10%</button>
+          <button type="button" class="rem-btn" data-rem="15">15%</button>
+          <button type="button" class="rem-btn" data-rem="20">20%</button>
+          <button type="button" class="rem-btn" data-rem="25">25%</button>
+          <button type="button" class="rem-btn" data-rem="30">30%</button>
+        </div>
+        <label class="field"><span>%</span><input type="number" id="f-remise" min="0" max="100" value="0" step="1"></label>
+      </div>
+    </div>
+    <div class="card totals-card">
+      <div class="card-body">
+        <div class="total-row"><span>Total HT MO</span><span id="ft-mo">0,00 €</span></div>
+        <div class="total-row"><span>Pièces</span><span id="ft-pieces">0,00 €</span></div>
+        <div class="total-row"><span>Sous-total HT</span><span id="ft-ht">0,00 €</span></div>
+        <div class="total-row"><span>TVA 8,5%</span><span id="ft-tva">0,00 €</span></div>
+        <div class="total-row" id="row-remise-f" style="display:none">
+          <span>Remise <span id="ft-remise-pct">0%</span></span>
+          <span id="ft-remise" class="negative">-0,00 €</span>
+        </div>
+        <div class="total-row total-final"><span>TOTAL TTC</span><span id="ft-ttc">0,00 €</span></div>
+      </div>
+    </div>
+    <div class="actions-bottom">
+      <button class="btn-secondary" id="btn-cancel-facture">Annuler</button>
+      <button class="btn-primary" id="btn-generate-facture-pdf">Générer facture PDF</button>
+    </div>
+  </main>
+</section>
+
+<!-- ═══════════════ MODAL DÉTAIL DEVIS ═══════════════ -->
+<div id="modal-devis" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3 id="modal-devis-num">Devis</h3>
+      <button class="modal-close" id="modal-close-btn">×</button>
+    </div>
+    <div class="modal-body" id="modal-devis-body"></div>
+    <div class="modal-footer">
+      <select id="modal-devis-statut" class="select-input">
+        <option value="brouillon">Brouillon</option>
+        <option value="envoye">Envoyé</option>
+        <option value="accepte">Accepté</option>
+        <option value="refuse">Refusé</option>
+        <option value="expire">Expiré</option>
+      </select>
+      <button class="btn-primary" id="btn-convert-facture">→ Convertir en facture</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════ TOAST NOTIFICATION ═══════════════ -->
 <div id="toast" class="toast"></div>
 
