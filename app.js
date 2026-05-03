@@ -1,941 +1,1348 @@
-/* ═══════════════════════════════════════════════════════════════════
-   LAROSCO TECHNICS — App PWA mobile
-   Style : industriel sombre · garage premium
-   ═══════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════
+// LAROSCO TECHNICS — App principale (v2 — facture + modal)
+// ═══════════════════════════════════════════════════════════════════
 
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-:root {
-  --bg: #0E0E0E;
-  --bg-2: #181818;
-  --bg-3: #1F1F1F;
-  --surface: #2A2A2A;
-  --border: #333;
-  --text: #FAFAFA;
-  --text-2: #B8B8B8;
-  --text-3: #777;
-  --accent: #E8670A;       /* orange Larosco */
-  --accent-light: #FF8A33;
-  --red: #C0392B;          /* BMW + erreurs */
-  --green: #27AE60;        /* validé / payé */
-  --yellow: #F39C12;       /* attente */
-  --shadow: 0 4px 16px rgba(0,0,0,0.5);
-  --radius: 14px;
-  --safe-top: env(safe-area-inset-top);
-  --safe-bottom: env(safe-area-inset-bottom);
+const state = {
+  prestations: [],
+  editingDevisId: null,
+  editingFactureId: null,
+  currentDevis: { grille: 'B', lignes: [], pieces: 0, remise_pct: 0 },
+  currentFacture: { grille: 'B', lignes: [], pieces: 0, remise_pct: 0, source_devis_id: null }
+};
+
+// ═══════════ NAVIGATION ═══════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const screen = document.getElementById('screen-' + name);
+  if (screen) screen.classList.add('active');
+  window.scrollTo(0, 0);
 }
 
-html, body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-  font-size: 15px;
-  line-height: 1.4;
-  overscroll-behavior: none;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+document.addEventListener('click', (e) => {
+  const screenBtn = e.target.closest('[data-screen]');
+  if (screenBtn) {
+    const name = screenBtn.dataset.screen;
+    if (name === 'new-devis') resetDevisForm();
+    if (name === 'new-facture') resetFactureForm();
+    showScreen(name);
+    if (name === 'tarifs') renderTarifs();
+    if (name === 'liste-devis') loadDevisList();
+    if (name === 'liste-factures') loadFacturesList();
+    if (name === 'clients') loadClientsList();
+  }
+  const backBtn = e.target.closest('[data-back]');
+  if (backBtn) {
+    showScreen(backBtn.dataset.back);
+    if (backBtn.dataset.back === 'home') loadKPIs();
+  }
+});
+
+// ═══════════ INIT ═══════════
+async function init() {
+  showScreen('home');
+  await loadPrestations();
+  await loadKPIs();
+}
+window.addEventListener('load', init);
+
+// ═══════════ DATA ═══════════
+async function loadPrestations() {
+  const { data, error } = await sb.from('prestations').select('*').order('ref');
+  if (error) { toast('Erreur chargement tarifs', 'error'); return; }
+  state.prestations = data || [];
 }
 
-/* ═════ ÉCRANS ═════ */
-.screen {
-  display: none;
-  min-height: 100vh;
-  padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
-}
-.screen.active { display: block; animation: fadeIn 0.3s ease; }
-@keyframes fadeIn { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+async function loadKPIs() {
+  const start = new Date();
+  start.setDate(1); start.setHours(0,0,0,0);
+  const startISO = start.toISOString().split('T')[0];
 
-/* ═════ TOPBAR ═════ */
-.topbar {
-  position: sticky;
-  top: 0;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  z-index: 100;
-  backdrop-filter: blur(10px);
-}
-.brand-mini {
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-.brand-mini span { color: var(--accent); }
-.topbar-title {
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: 0.3px;
-}
-.icon-btn {
-  background: none;
-  border: none;
-  color: var(--text);
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.icon-btn:active { background: var(--surface); }
+  const { data: factures } = await sb.from('factures').select('total_ht, statut_paiement')
+    .gte('date_emission', startISO);
 
-/* ═════ PAGE ═════ */
-.page {
-  padding: 20px 16px 100px;
-  max-width: 720px;
-  margin: 0 auto;
-}
-.page-title {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  margin-bottom: 4px;
-}
-.page-sub {
-  color: var(--text-2);
-  font-size: 14px;
-  margin-bottom: 24px;
+  const ca = (factures || []).reduce((s, f) => s + (parseFloat(f.total_ht) || 0), 0);
+  const impayees = (factures || []).filter(f => f.statut_paiement !== 'paye').length;
+
+  const { count: nbDevis } = await sb.from('devis').select('*', { count: 'exact', head: true })
+    .eq('statut', 'envoye');
+  const { count: nbClients } = await sb.from('clients').select('*', { count: 'exact', head: true });
+
+  document.getElementById('kpi-ca').textContent = formatEUR(ca);
+  document.getElementById('kpi-devis').textContent = nbDevis || 0;
+  document.getElementById('kpi-impaye').textContent = impayees;
+  document.getElementById('kpi-clients').textContent = nbClients || 0;
 }
 
-/* ═════ LOGIN ═════ */
-.login-wrap {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 32px 28px;
-  max-width: 480px;
-  margin: 0 auto;
-}
-.logo-wrap {
-  text-align: center;
-  margin-bottom: 48px;
-}
-.logo-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 70px;
-  height: 70px;
-  background: var(--accent);
-  color: white;
-  font-weight: 900;
-  font-size: 28px;
-  letter-spacing: -1px;
-  border-radius: 18px;
-  margin-bottom: 20px;
-  box-shadow: 0 8px 24px rgba(232, 103, 10, 0.3);
-}
-.logo-text {
-  font-size: 24px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  margin-bottom: 6px;
-}
-.logo-text span { color: var(--accent); }
-.logo-sub {
-  color: var(--text-3);
-  font-size: 13px;
-  letter-spacing: 0.3px;
-}
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.login-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.login-form span {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-.login-form input {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  color: var(--text);
-  font-size: 16px;
-  transition: border 0.15s;
-}
-.login-form input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.login-form button {
-  background: var(--accent);
-  color: white;
-  border: none;
-  padding: 18px;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  margin-top: 8px;
-  transition: transform 0.1s, background 0.15s;
-}
-.login-form button:active {
-  transform: scale(0.98);
-  background: var(--accent-light);
-}
-.error {
-  color: var(--red);
-  font-size: 13px;
-  text-align: center;
-  min-height: 18px;
-}
-.footer-mention {
-  text-align: center;
-  margin-top: 32px;
-  font-size: 11px;
-  color: var(--text-3);
-  letter-spacing: 0.3px;
+// ═══════════ DEVIS — FORM ═══════════
+function resetDevisForm() {
+  state.currentDevis = { grille: 'B', lignes: [], pieces: 0, remise_pct: 0 };
+  state.editingDevisId = null;
+  document.getElementById('devis-title').textContent = 'Nouveau devis';
+  document.querySelectorAll('#screen-new-devis input').forEach(i => {
+    if (i.type === 'number') i.value = (i.id === 'd-remise' || i.id === 'd-pieces') ? 0 : '';
+    else i.value = '';
+  });
+  document.querySelectorAll('#screen-new-devis .grille-btn').forEach(b => b.classList.toggle('active', b.dataset.grille === 'B'));
+  document.querySelectorAll('#screen-new-devis .rem-btn').forEach(b => b.classList.toggle('active', b.dataset.rem === '0'));
+  document.getElementById('prestations-list').innerHTML = '';
+  addPrestationRow('d');
+  updateTotals('d');
 }
 
-/* ═════ KPI ═════ */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 28px;
-}
-.kpi {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 18px;
-}
-.kpi-primary {
-  grid-column: 1 / -1;
-  background: linear-gradient(135deg, var(--accent), #C75A09);
-  border-color: transparent;
-}
-.kpi-label {
-  font-size: 12px;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 8px;
-}
-.kpi-primary .kpi-label { color: rgba(255,255,255,0.85); }
-.kpi-value {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-}
-.kpi-primary .kpi-value { font-size: 36px; }
-.kpi-warn { color: var(--yellow); }
+// Grille devis
+document.querySelectorAll('#screen-new-devis .grille-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#screen-new-devis .grille-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.currentDevis.grille = btn.dataset.grille;
+    document.querySelectorAll('#prestations-list .prestation-row').forEach(r => refreshPrestationRow(r, 'd'));
+    updateTotals('d');
+  });
+});
 
-/* ═════ ACTIONS ═════ */
-.action-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.action-btn {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 22px 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  color: var(--text);
-  transition: transform 0.1s, border 0.15s;
-}
-.action-btn:active {
-  transform: scale(0.97);
-  border-color: var(--accent);
-}
-.action-icon {
-  font-size: 28px;
-  font-weight: 800;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-3);
-  border-radius: 12px;
-}
-.action-primary {
-  background: var(--bg-3);
-  border-color: var(--accent);
-}
-.action-primary .action-icon {
-  background: var(--accent);
-  color: white;
-}
-.action-label {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+// Remise devis
+document.querySelectorAll('#screen-new-devis .rem-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#screen-new-devis .rem-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('d-remise').value = btn.dataset.rem;
+    state.currentDevis.remise_pct = parseInt(btn.dataset.rem);
+    updateTotals('d');
+  });
+});
+document.getElementById('d-remise').addEventListener('input', e => {
+  state.currentDevis.remise_pct = parseFloat(e.target.value) || 0;
+  document.querySelectorAll('#screen-new-devis .rem-btn').forEach(b => b.classList.remove('active'));
+  updateTotals('d');
+});
+document.getElementById('d-pieces').addEventListener('input', e => {
+  state.currentDevis.pieces = parseFloat(e.target.value) || 0;
+  updateTotals('d');
+});
+
+document.getElementById('btn-add-prestation').addEventListener('click', () => addPrestationRow('d'));
+
+// ═══════════ FACTURE — FORM ═══════════
+function resetFactureForm(prefillFromDevis = null) {
+  state.currentFacture = { grille: 'B', lignes: [], pieces: 0, remise_pct: 0, source_devis_id: null };
+  state.editingFactureId = null;
+  document.getElementById('facture-title').textContent = 'Nouvelle facture';
+
+  document.querySelectorAll('#screen-new-facture input').forEach(i => {
+    if (i.type === 'number') i.value = (i.id === 'f-remise' || i.id === 'f-pieces') ? 0 : '';
+    else if (i.type === 'date') i.value = new Date().toISOString().split('T')[0];
+    else i.value = '';
+  });
+  document.getElementById('f-reglement').value = 'Espèces';
+  document.querySelectorAll('#screen-new-facture .grille-btn').forEach(b => b.classList.toggle('active', b.dataset.grille === 'B'));
+  document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => b.classList.toggle('active', b.dataset.rem === '0'));
+  document.getElementById('prestations-list-f').innerHTML = '';
+  document.getElementById('facture-from-devis-banner').style.display = 'none';
+
+  // Échéance par défaut : aujourd'hui + 30 jours
+  const ech = new Date();
+  ech.setDate(ech.getDate() + 30);
+  document.getElementById('f-echeance').value = ech.toISOString().split('T')[0];
+
+  if (prefillFromDevis) {
+    prefillFactureFromDevis(prefillFromDevis);
+  } else {
+    addPrestationRow('f');
+  }
+  updateTotals('f');
 }
 
-/* ═════ CARDS ═════ */
-.card {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.card-head {
-  background: var(--bg-3);
-  padding: 12px 16px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: var(--text-2);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-add {
-  background: var(--accent);
-  color: white;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.card-body {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.field span {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-.field input {
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  color: var(--text);
-  font-size: 16px;
-  width: 100%;
-}
-.field input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.row-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+async function prefillFactureFromDevis(devis) {
+  state.currentFacture.source_devis_id = devis.id;
+  state.currentFacture.grille = devis.grille;
+  state.currentFacture.pieces = parseFloat(devis.pieces) || 0;
+  state.currentFacture.remise_pct = parseFloat(devis.remise_pct) || 0;
+
+  // Banner
+  document.getElementById('facture-from-devis-banner').style.display = 'flex';
+  document.getElementById('facture-source-devis').textContent = devis.numero;
+
+  // Charger client
+  if (devis.client_id) {
+    const { data: cl } = await sb.from('clients').select('*').eq('id', devis.client_id).maybeSingle();
+    if (cl) {
+      document.getElementById('f-client-nom').value = cl.nom || '';
+      document.getElementById('f-client-tel').value = cl.telephone || '';
+      document.getElementById('f-client-commune').value = cl.commune || '';
+      document.getElementById('f-client-adresse').value = cl.adresse || '';
+    }
+  }
+
+  // Véhicule (depuis colonnes du devis)
+  document.getElementById('f-vehicule').value = devis.vehicule_nom || '';
+  document.getElementById('f-immat').value = devis.vehicule_immat || '';
+  document.getElementById('f-km').value = devis.vehicule_km || '';
+
+  // Pieces / remise
+  document.getElementById('f-pieces').value = state.currentFacture.pieces;
+  document.getElementById('f-remise').value = state.currentFacture.remise_pct;
+
+  // Marquer le bon bouton remise rapide actif
+  document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.rem) === state.currentFacture.remise_pct);
+  });
+
+  // Grille
+  document.querySelectorAll('#screen-new-facture .grille-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.grille === devis.grille));
+
+  // Vider les anciennes lignes puis ajouter celles du devis
+  document.getElementById('prestations-list-f').innerHTML = '';
+  for (const lig of (devis.lignes || [])) {
+    addPrestationRow('f', lig);
+  }
+
+  // Date facture = aujourd'hui, échéance = +30j
+  const today = new Date().toISOString().split('T')[0];
+  const ech = new Date();
+  ech.setDate(ech.getDate() + 30);
+  document.getElementById('f-date').value = today;
+  document.getElementById('f-echeance').value = ech.toISOString().split('T')[0];
+
+  updateTotals('f');
+  toast('Facture pré-remplie depuis ' + devis.numero, 'success');
 }
 
-/* ═════ GRILLE BUTTONS ═════ */
-.grille-selector {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-}
-.grille-btn {
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 8px;
-  color: var(--text-2);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.15s;
-}
-.grille-btn strong {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text);
-}
-.grille-btn small {
-  font-size: 10px;
-  text-align: center;
-  line-height: 1.3;
-}
-.grille-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-.grille-btn.active strong { color: white; }
+document.querySelectorAll('#screen-new-facture .grille-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#screen-new-facture .grille-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.currentFacture.grille = btn.dataset.grille;
+    document.querySelectorAll('#prestations-list-f .prestation-row').forEach(r => refreshPrestationRow(r, 'f'));
+    updateTotals('f');
+  });
+});
+document.querySelectorAll('#screen-new-facture .rem-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('f-remise').value = btn.dataset.rem;
+    state.currentFacture.remise_pct = parseInt(btn.dataset.rem);
+    updateTotals('f');
+  });
+});
+document.getElementById('f-remise').addEventListener('input', e => {
+  state.currentFacture.remise_pct = parseFloat(e.target.value) || 0;
+  document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => b.classList.remove('active'));
+  updateTotals('f');
+});
+document.getElementById('f-pieces').addEventListener('input', e => {
+  state.currentFacture.pieces = parseFloat(e.target.value) || 0;
+  updateTotals('f');
+});
+document.getElementById('btn-add-prestation-f').addEventListener('click', () => addPrestationRow('f'));
+document.getElementById('btn-cancel-facture').addEventListener('click', () => showScreen('home'));
 
-/* ═════ PRESTATIONS ═════ */
-.prestation-row {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.prest-search-wrap {
-  position: relative;
-}
-.prest-search {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  color: var(--text);
-  font-size: 14px;
-}
-.prest-search:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.prest-suggestions {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  max-height: 240px;
-  overflow-y: auto;
-  z-index: 50;
-  box-shadow: var(--shadow);
-  display: none;
-}
-.prest-suggestions.open { display: block; }
-.suggestion-item {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  font-size: 13px;
-}
-.suggestion-item:last-child { border-bottom: none; }
-.suggestion-item:active { background: var(--surface); }
-.sugg-ref {
-  font-weight: 700;
-  color: var(--accent);
-  font-size: 11px;
-  letter-spacing: 0.5px;
-}
-.sugg-desig {
-  display: block;
-  margin-top: 2px;
-  color: var(--text);
-}
-.sugg-prix {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-2);
-  font-size: 11px;
-}
-.prest-meta {
-  display: grid;
-  grid-template-columns: 1fr 80px 100px;
-  gap: 8px;
-  align-items: center;
-}
-.prest-qty, .prest-pu {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  color: var(--text);
-  font-size: 14px;
-  text-align: center;
-}
-.prest-total {
-  text-align: right;
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--accent);
-}
-.prest-remove {
-  background: none;
-  border: none;
-  color: var(--red);
-  cursor: pointer;
-  font-size: 11px;
-  align-self: flex-end;
-  text-decoration: underline;
+// ═══════════ PRESTATION ROW (générique d/f) ═══════════
+function addPrestationRow(prefix, prefillData = null) {
+  const list = document.getElementById(prefix === 'd' ? 'prestations-list' : 'prestations-list-f');
+  const row = document.createElement('div');
+  row.className = 'prestation-row';
+  row.innerHTML = `
+    <div class="prest-search-wrap">
+      <input type="search" class="prest-search" placeholder="Rechercher référence ou désignation..." autocomplete="off">
+      <div class="prest-suggestions"></div>
+    </div>
+    <div class="prest-meta">
+      <div class="prest-ref-label" style="font-size:11px;color:var(--text-3)"></div>
+      <input type="number" class="prest-qty" value="1" min="0" step="0.5">
+      <div class="prest-total">0,00 €</div>
+    </div>
+    <button type="button" class="prest-remove">Supprimer</button>
+  `;
+  list.appendChild(row);
+
+  const search = row.querySelector('.prest-search');
+  const sugg = row.querySelector('.prest-suggestions');
+  const qty = row.querySelector('.prest-qty');
+  const stateRef = prefix === 'd' ? state.currentDevis : state.currentFacture;
+
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase().trim();
+    if (q.length < 2) { sugg.classList.remove('open'); return; }
+    const matches = state.prestations.filter(p =>
+      p.ref.toLowerCase().includes(q) ||
+      (p.designation || '').toLowerCase().includes(q)
+    ).slice(0, 8);
+    sugg.innerHTML = matches.map(p => {
+      const prix = getPrice(p, stateRef.grille);
+      return `<div class="suggestion-item" data-ref="${p.ref}">
+        <span class="sugg-ref">${p.ref}</span>
+        <span class="sugg-desig">${p.designation}</span>
+        <span class="sugg-prix">${formatEUR(prix)} (grille ${getEffectiveGrille(p, stateRef.grille)})</span>
+      </div>`;
+    }).join('') || '<div style="padding:14px;text-align:center;color:var(--text-3)">Aucun résultat</div>';
+    sugg.classList.add('open');
+  });
+
+  search.addEventListener('blur', () => setTimeout(() => sugg.classList.remove('open'), 200));
+
+  sugg.addEventListener('click', (e) => {
+    const item = e.target.closest('.suggestion-item');
+    if (!item) return;
+    const p = state.prestations.find(x => x.ref === item.dataset.ref);
+    if (!p) return;
+    row.dataset.ref = p.ref;
+    search.value = p.designation;
+    row.querySelector('.prest-ref-label').textContent = p.ref;
+    sugg.classList.remove('open');
+    refreshPrestationRow(row, prefix);
+    updateTotals(prefix);
+  });
+
+  qty.addEventListener('input', () => { refreshPrestationRow(row, prefix); updateTotals(prefix); });
+  row.querySelector('.prest-remove').addEventListener('click', () => { row.remove(); updateTotals(prefix); });
+
+  // Pré-remplir si donnée fournie
+  if (prefillData) {
+    const p = state.prestations.find(x => x.ref === prefillData.ref);
+    if (p) {
+      row.dataset.ref = p.ref;
+      search.value = p.designation;
+      row.querySelector('.prest-ref-label').textContent = p.ref;
+      qty.value = prefillData.qte || 1;
+      refreshPrestationRow(row, prefix);
+    }
+  }
 }
 
-/* ═════ REMISE QUICK ═════ */
-.remise-quick {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.rem-btn {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 4px;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
-.rem-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
+function refreshPrestationRow(row, prefix) {
+  const ref = row.dataset.ref;
+  if (!ref) return;
+  const p = state.prestations.find(x => x.ref === ref);
+  if (!p) return;
+  const stateRef = prefix === 'd' ? state.currentDevis : state.currentFacture;
+  const prix = getPrice(p, stateRef.grille);
+  const qty = parseFloat(row.querySelector('.prest-qty').value) || 0;
+  const total = prix * qty;
+  row.querySelector('.prest-total').textContent = formatEUR(total);
+  row.dataset.pu = prix;
+  row.dataset.total = total;
+  row.dataset.designation = p.designation;
 }
 
-/* ═════ TOTAUX ═════ */
-.totals-card { background: var(--bg-3); }
-.total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  font-size: 14px;
-  color: var(--text-2);
-  border-bottom: 1px dashed var(--border);
+function getEffectiveGrille(presta, selected) {
+  if (presta.ref.startsWith('BMW')) return 'D';
+  return selected;
 }
-.total-row:last-child { border-bottom: none; }
-.total-row span:last-child {
-  font-weight: 600;
-  color: var(--text);
-}
-.total-final {
-  background: var(--accent);
-  margin: 12px -16px -16px;
-  padding: 18px 16px;
-  font-size: 16px;
-  font-weight: 800;
-}
-.total-final span {
-  color: white !important;
-}
-.total-final span:last-child {
-  font-size: 22px;
-}
-.negative { color: var(--red) !important; }
-
-/* ═════ ACTIONS BAS ═════ */
-.actions-bottom {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  gap: 10px;
-  margin-top: 24px;
-}
-.btn-primary, .btn-secondary {
-  padding: 16px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 15px;
-  cursor: pointer;
-  border: none;
-  transition: transform 0.1s;
-}
-.btn-primary {
-  background: var(--accent);
-  color: white;
-}
-.btn-secondary {
-  background: var(--bg-3);
-  color: var(--text);
-  border: 1.5px solid var(--border);
-}
-.btn-primary:active, .btn-secondary:active {
-  transform: scale(0.98);
+function getPrice(presta, grille) {
+  const g = getEffectiveGrille(presta, grille);
+  if (g === 'B') return parseFloat(presta.prix_b) || 0;
+  if (g === 'C') return parseFloat(presta.prix_c) || 0;
+  if (g === 'D') return parseFloat(presta.prix_d) || 0;
+  return 0;
 }
 
-/* ═════ SEARCH ═════ */
-.search-input {
-  width: 100%;
-  background: var(--bg-2);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  color: var(--text);
-  font-size: 15px;
-  margin-bottom: 16px;
-}
-.search-input:focus {
-  outline: none;
-  border-color: var(--accent);
+function updateTotals(prefix) {
+  const listSel = prefix === 'd' ? '#prestations-list .prestation-row' : '#prestations-list-f .prestation-row';
+  let totalMo = 0;
+  document.querySelectorAll(listSel).forEach(row => { totalMo += parseFloat(row.dataset.total) || 0; });
+  const stateRef = prefix === 'd' ? state.currentDevis : state.currentFacture;
+  const pieces = stateRef.pieces;
+  const remisePct = stateRef.remise_pct;
+
+  const sousHt = totalMo + pieces;
+  const tva = sousHt * 0.085;
+  const ttcAvant = sousHt + tva;
+  const remiseMontant = remisePct > 0 ? ttcAvant * remisePct / 100 : 0;
+  const ttc = ttcAvant - remiseMontant;
+
+  const p = prefix === 'd' ? '' : 'f';
+  const id = (s) => p + 't-' + s;
+
+  document.getElementById(id('mo')).textContent = formatEUR(totalMo);
+  document.getElementById(id('pieces')).textContent = formatEUR(pieces);
+  document.getElementById(id('ht')).textContent = formatEUR(sousHt);
+  document.getElementById(id('tva')).textContent = formatEUR(tva);
+  document.getElementById(id('ttc')).textContent = formatEUR(ttc);
+
+  const remiseRow = document.getElementById(prefix === 'd' ? 'row-remise' : 'row-remise-f');
+  if (remisePct > 0) {
+    remiseRow.style.display = 'flex';
+    document.getElementById(id('remise-pct')).textContent = remisePct + '%';
+    document.getElementById(id('remise')).textContent = '-' + formatEUR(remiseMontant);
+  } else {
+    remiseRow.style.display = 'none';
+  }
 }
 
-/* ═════ TARIFS LIST ═════ */
-.tarif-item {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.tarif-info { flex: 1; min-width: 0; }
-.tarif-ref {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.5px;
-  margin-bottom: 2px;
-}
-.tarif-ref.bmw { color: var(--red); }
-.tarif-desig {
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tarif-prix {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-.tarif-prix-row {
-  font-size: 12px;
-  color: var(--text-2);
-}
-.tarif-prix-row strong { color: var(--text); }
+// ═══════════ GÉNÉRATION PDF DEVIS ═══════════
+document.getElementById('btn-generate-pdf').addEventListener('click', async () => {
+  await generatePDF('devis');
+});
+document.getElementById('btn-generate-facture-pdf').addEventListener('click', async () => {
+  await generatePDF('facture');
+});
 
-/* ═════ LISTE DEVIS / FACTURES ═════ */
-.doc-item {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-}
-.doc-num {
-  font-weight: 700;
-  font-size: 15px;
-  margin-bottom: 2px;
-}
-.doc-client {
-  font-size: 13px;
-  color: var(--text-2);
-}
-.doc-date {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-.doc-price {
-  font-weight: 800;
-  font-size: 16px;
-  color: var(--accent);
-}
-.doc-status {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  margin-top: 4px;
-}
-.status-paye { background: rgba(39, 174, 96, 0.2); color: var(--green); }
-.status-impaye { background: rgba(192, 57, 43, 0.2); color: var(--red); }
-.status-attente { background: rgba(243, 156, 18, 0.2); color: var(--yellow); }
+async function generatePDF(type) {
+  const isFacture = type === 'facture';
+  const prefix = isFacture ? 'f' : 'd';
+  const stateRef = isFacture ? state.currentFacture : state.currentDevis;
 
-/* ═════ TOAST ═════ */
-.toast {
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%) translateY(100px);
-  background: var(--bg-3);
-  color: var(--text);
-  padding: 14px 22px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  z-index: 1000;
-  opacity: 0;
-  transition: all 0.3s;
-  pointer-events: none;
-}
-.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-.toast.success { border-color: var(--green); }
-.toast.error { border-color: var(--red); }
+  // Récupérer numéro
+  const { data: numData, error: numErr } = await sb.rpc('prochain_numero', { type_doc: type });
+  if (numErr) { toast('Erreur numéro', 'error'); return; }
+  const numero = numData;
 
-/* ═════ EMPTY STATE ═════ */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--text-3);
-}
-.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
-.empty-state .text { font-size: 14px; }
+  // Lignes
+  const lignes = [];
+  const listSel = isFacture ? '#prestations-list-f .prestation-row' : '#prestations-list .prestation-row';
+  document.querySelectorAll(listSel).forEach(row => {
+    if (!row.dataset.ref) return;
+    lignes.push({
+      ref: row.dataset.ref,
+      designation: row.dataset.designation,
+      qte: parseFloat(row.querySelector('.prest-qty').value) || 0,
+      pu: parseFloat(row.dataset.pu) || 0,
+      montant: parseFloat(row.dataset.total) || 0
+    });
+  });
+  if (lignes.length === 0) { toast('Ajoutez au moins une prestation', 'error'); return; }
 
+  // Données client/véhicule
+  const client = {
+    nom: document.getElementById(prefix + '-client-nom').value || '',
+    tel: document.getElementById(prefix + '-client-tel').value || '',
+    commune: document.getElementById(prefix + '-client-commune').value || '',
+    adresse: document.getElementById(prefix + '-client-adresse').value || ''
+  };
+  const vehicule = {
+    nom: document.getElementById(prefix + '-vehicule').value || '',
+    immat: document.getElementById(prefix + '-immat').value || '',
+    km: document.getElementById(prefix + '-km').value || ''
+  };
 
-/* ═════ MODAL ═════ */
-.modal {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.75);
-  z-index: 200;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0;
-}
-.modal.show { display: flex; animation: fadeIn 0.2s; }
-.modal-content {
-  background: var(--bg-2);
-  width: 100%;
-  max-width: 720px;
-  max-height: 90vh;
-  border-radius: 18px 18px 0 0;
-  display: flex;
-  flex-direction: column;
-  animation: slideUp 0.3s ease;
-}
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: none; } }
-.modal-head {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: sticky;
-  top: 0;
-  background: var(--bg-2);
-}
-.modal-head h3 {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--accent);
-}
-.modal-close {
-  background: var(--bg-3);
-  border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  color: var(--text);
-  font-size: 22px;
-  cursor: pointer;
-}
-.modal-body {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-.modal-footer {
-  padding: 14px 20px calc(14px + var(--safe-bottom));
-  border-top: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  gap: 10px;
-}
+  let dateEmission = new Date().toISOString().split('T')[0];
+  let dateEcheance = '';
+  let modeReglement = '';
+  let observations = '';
+  if (isFacture) {
+    dateEmission = document.getElementById('f-date').value || dateEmission;
+    dateEcheance = document.getElementById('f-echeance').value || '';
+    modeReglement = document.getElementById('f-reglement').value || '';
+    observations = document.getElementById('f-observations').value || '';
+  }
 
-.modal-section {
-  margin-bottom: 16px;
-}
-.modal-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 4px;
-}
-.modal-value {
-  font-size: 15px;
-  color: var(--text);
-  font-weight: 500;
-}
-.modal-prest-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--border);
-  font-size: 13px;
-}
-.modal-prest-row:last-child { border-bottom: none; }
-.modal-prest-row .ref { color: var(--accent); font-weight: 700; font-size: 11px; }
-.modal-prest-row .desig { color: var(--text); margin-top: 2px; }
-.modal-prest-row .price { color: var(--text-2); white-space: nowrap; margin-left: 12px; }
+  const totalMo = lignes.reduce((s, l) => s + l.montant, 0);
+  const pieces = stateRef.pieces;
+  const sousHt = totalMo + pieces;
+  const tva = sousHt * 0.085;
+  const ttcAvant = sousHt + tva;
+  const remisePct = stateRef.remise_pct;
+  const remiseMontant = remisePct > 0 ? ttcAvant * remisePct / 100 : 0;
+  const ttc = ttcAvant - remiseMontant;
 
-/* ═════ SELECT ═════ */
-.select-input {
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  color: var(--text);
-  font-size: 16px;
-  width: 100%;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23B8B8B8' stroke-width='2'%3e%3cpath d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 40px;
-}
-.select-input:focus { outline: none; border-color: var(--accent); }
+  // PDF
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, M = 15;
 
-/* ═════ FROM-DEVIS BANNER ═════ */
-.from-devis-banner {
-  background: linear-gradient(135deg, var(--accent), #C75A09);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: white;
-}
-.from-devis-banner strong { font-size: 14px; font-weight: 700; }
-.from-devis-banner small { font-size: 12px; opacity: 0.85; }
+  // HEADER NOIR
+  doc.setFillColor(17, 17, 17);
+  doc.rect(0, 0, W, 35, 'F');
+  doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(20);
+  doc.text('LAROSCOTECHNICS', M, 14);
+  doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(180, 180, 180);
+  doc.text('Garage automobile · Case-Pilote · Martinique', M, 19);
+  doc.text('Tel : 0696 28 11 05  |  laroscotechnics@gmail.com', M, 23);
+  doc.setTextColor(232, 103, 10).setFont('helvetica', 'bold');
+  doc.text('SIRET : 10128189700013  |  TVA 8,5% Art.296 CGI DOM', M, 28);
 
-/* ═════ STATUS BADGE in liste ═════ */
-.status-brouillon { background: rgba(180,180,180,0.2); color: var(--text-2); }
-.status-envoye { background: rgba(243,156,18,0.2); color: var(--yellow); }
-.status-accepte { background: rgba(39,174,96,0.2); color: var(--green); }
-.status-refuse { background: rgba(192,57,43,0.2); color: var(--red); }
-.status-expire { background: rgba(180,180,180,0.2); color: var(--text-3); }
+  // Bloc DEVIS / FACTURE à droite
+  doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(22);
+  doc.text(isFacture ? 'FACTURE' : 'DEVIS', W - M, 14, { align: 'right' });
+  doc.setFontSize(10).setTextColor(232, 103, 10);
+  doc.text(numero, W - M, 20, { align: 'right' });
+  doc.setFontSize(8).setTextColor(180, 180, 180);
+  doc.text('Date : ' + new Date(dateEmission).toLocaleDateString('fr-FR'), W - M, 25, { align: 'right' });
+  doc.text('Grille : ' + stateRef.grille, W - M, 29, { align: 'right' });
 
+  doc.setFillColor(192, 57, 43);
+  doc.rect(0, 35, W, 2, 'F');
 
-/* ═════ FICHE CLIENT — STATS GRID ═════ */
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 8px;
-}
-.stat-box {
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  text-align: center;
-}
-.stat-value {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-.stat-label {
-  font-size: 11px;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+  let y = 45;
 
-/* ═════ VÉHICULES dans modal ═════ */
-.vehicle-item {
-  background: var(--bg-3);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  margin-top: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: border 0.15s;
-}
-.vehicle-item.vehicle-active {
-  border-color: var(--accent);
-  background: rgba(232, 103, 10, 0.1);
-}
-.badge-dernier {
-  background: var(--accent);
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.5px;
+  // Bloc client/véhicule
+  doc.setFillColor(17, 17, 17);
+  doc.rect(M, y, (W - 2*M)/2 - 1, 7, 'F');
+  doc.setFillColor(192, 57, 43);
+  doc.rect(W/2 + 1, y, (W - 2*M)/2 - 1, 7, 'F');
+  doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(9);
+  doc.text(isFacture ? 'FACTURÉ À' : 'DEVIS POUR', M + 3, y + 5);
+  doc.text('VÉHICULE', W/2 + 4, y + 5);
+
+  y += 7;
+  const blocH = isFacture ? 28 : 22;
+  doc.setFillColor(249, 249, 249);
+  doc.rect(M, y, (W - 2*M)/2 - 1, blocH, 'F');
+  doc.rect(W/2 + 1, y, (W - 2*M)/2 - 1, blocH, 'F');
+  doc.setTextColor(17, 17, 17).setFont('helvetica', 'bold').setFontSize(10);
+  doc.text(client.nom, M + 3, y + 5);
+  doc.text(vehicule.nom, W/2 + 4, y + 5);
+  doc.setFont('helvetica', 'normal').setFontSize(8.5);
+  doc.text('Tél : ' + client.tel, M + 3, y + 11);
+  doc.text('Immat : ' + vehicule.immat, W/2 + 4, y + 11);
+  doc.text('Adresse : ' + client.adresse, M + 3, y + 16);
+  doc.text('KM : ' + vehicule.km, W/2 + 4, y + 16);
+  doc.text('Commune : ' + client.commune, M + 3, y + 21);
+  if (isFacture) {
+    doc.text('Échéance : ' + (dateEcheance ? new Date(dateEcheance).toLocaleDateString('fr-FR') : '—'), W/2 + 4, y + 16);
+    doc.text('Règlement : ' + modeReglement, W/2 + 4, y + 21);
+    doc.text('Observations : ' + observations, M + 3, y + 26);
+  }
+
+  y += blocH + 6;
+
+  // Tableau prestations
+  doc.autoTable({
+    startY: y,
+    head: [['Réf.', 'Désignation', 'Qté', 'PU HT', 'Montant HT']],
+    body: lignes.map(l => [l.ref, l.designation, l.qte, formatEUR(l.pu), formatEUR(l.montant)]),
+    headStyles: { fillColor: [17,17,17], textColor: [255,255,255], fontSize: 9, halign: 'center' },
+    bodyStyles: { fontSize: 9 },
+    alternateRowStyles: { fillColor: [244,246,247] },
+    columnStyles: {
+      0: { halign: 'center', fontStyle: 'bold', textColor: [26,58,92], cellWidth: 22 },
+      1: { cellWidth: 80 },
+      2: { halign: 'center', cellWidth: 14 },
+      3: { halign: 'right', cellWidth: 25 },
+      4: { halign: 'right', fontStyle: 'bold', cellWidth: 30, fillColor: [235,245,251] }
+    },
+    margin: { left: M, right: M }
+  });
+
+  y = doc.lastAutoTable.finalY + 4;
+
+  function totalRow(label, value, opts = {}) {
+    const bgL = opts.bgL || [26, 58, 92];
+    const bgV = opts.bgV || [235, 245, 251];
+    const fgV = opts.fgV || [17, 17, 17];
+    const h = opts.h || 7;
+    doc.setFillColor(...bgL);
+    doc.rect(M, y, W - 2*M - 30, h, 'F');
+    doc.setFillColor(...bgV);
+    doc.rect(W - M - 30, y, 30, h, 'F');
+    doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(9);
+    doc.text(label, W - M - 32, y + h/2 + 1.5, { align: 'right' });
+    doc.setTextColor(...fgV).setFont('helvetica', opts.bold ? 'bold' : 'normal').setFontSize(opts.size || 9);
+    doc.text(value, W - M - 1.5, y + h/2 + 1.5, { align: 'right' });
+    y += h;
+  }
+
+  totalRow('Total HT main d\'oeuvre', formatEUR(totalMo));
+  totalRow('Pièces / Fournitures', formatEUR(pieces), { bgL: [68, 68, 68] });
+  totalRow('Sous-total HT', formatEUR(sousHt), { bgL: [26, 58, 92], bold: true });
+  totalRow('TVA 8,5% (Martinique)', formatEUR(tva), { bgL: [51, 51, 51] });
+
+  const ttcLabel = remisePct > 0 ? 'TTC (avant remise)' : 'TOTAL TTC';
+  doc.setFillColor(17, 17, 17);
+  doc.rect(M, y, W - 2*M - 35, 10, 'F');
+  doc.setFillColor(192, 57, 43);
+  doc.rect(W - M - 35, y, 35, 10, 'F');
+  doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(12);
+  doc.text(ttcLabel, W - M - 37, y + 7, { align: 'right' });
+  doc.setFontSize(13);
+  doc.text(formatEUR(ttcAvant), W - M - 2, y + 7, { align: 'right' });
+  y += 12;
+
+  if (remisePct > 0) {
+    doc.setFillColor(125, 102, 8);
+    doc.rect(M, y, W - 2*M - 30, 7, 'F');
+    doc.setFillColor(254, 249, 231);
+    doc.rect(W - M - 30, y, 30, 7, 'F');
+    doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(9);
+    doc.text('REMISE ' + remisePct + '% APPLIQUÉE', W - M - 32, y + 5, { align: 'right' });
+    doc.setTextColor(192, 57, 43);
+    doc.text('-' + formatEUR(remiseMontant), W - M - 1.5, y + 5, { align: 'right' });
+    y += 9;
+
+    doc.setFillColor(125, 102, 8);
+    doc.rect(M, y, W - 2*M - 35, 10, 'F');
+    doc.setFillColor(39, 174, 96);
+    doc.rect(W - M - 35, y, 35, 10, 'F');
+    doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(12);
+    doc.text('TOTAL TTC APRÈS REMISE', W - M - 37, y + 7, { align: 'right' });
+    doc.setFontSize(13);
+    doc.text(formatEUR(ttc), W - M - 2, y + 7, { align: 'right' });
+    y += 12;
+  }
+
+  y += 8;
+  doc.setTextColor(120, 120, 120).setFont('helvetica', 'bold').setFontSize(8);
+  doc.text('CONDITIONS', M, y); y += 4;
+  doc.setFont('helvetica', 'normal').setFontSize(7.5);
+  doc.text('Diagnostic obligatoire avant travaux — 50% déduit si réalisés.', M, y); y += 3.5;
+  doc.text('Pièces fournies par le client (origine OE / équipementier / adaptable).', M, y); y += 3.5;
+  doc.text('Garantie main d\'œuvre : 6 mois ou 10 000 km (premier atteint).', M, y); y += 3.5;
+  doc.text('Paiement : espèces, chèque, virement bancaire, CB.', M, y); y += 3.5;
+  if (!isFacture) {
+    doc.text('Devis valable 30 jours.', M, y);
+  } else if (dateEcheance) {
+    doc.text('Échéance de paiement : ' + new Date(dateEcheance).toLocaleDateString('fr-FR'), M, y);
+  }
+
+  doc.setTextColor(150, 150, 150).setFontSize(7);
+  doc.text(
+    'LaroscoTechnics · Case-Pilote, Martinique · 0696 28 11 05 · laroscotechnics@gmail.com · SIRET 10128189700013 · TVA 8,5% Art. 296 CGI DOM',
+    W/2, 287, { align: 'center' }
+  );
+
+  // Sauver dans Supabase
+  let client_id = null;
+  if (client.nom) {
+    const { data: existing } = await sb.from('clients').select('id').ilike('nom', client.nom).maybeSingle();
+    if (existing) {
+      client_id = existing.id;
+      await sb.from('clients').update({
+        telephone: client.tel, adresse: client.adresse, commune: client.commune
+      }).eq('id', client_id);
+    } else {
+      const { data: newCl } = await sb.from('clients').insert({
+        nom: client.nom, telephone: client.tel, adresse: client.adresse, commune: client.commune
+      }).select().single();
+      if (newCl) client_id = newCl.id;
+    }
+  }
+
+  if (isFacture) {
+    if (state.editingFactureId) {
+      await sb.from('factures').update({
+        client_id, date_emission: dateEmission,
+        date_echeance: dateEcheance || null,
+        mode_reglement: modeReglement, observations,
+        lignes, total_ht: sousHt, pieces,
+        remise_pct: remisePct, remise_montant: remiseMontant,
+        tva, total_ttc: ttc,
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      }).eq('id', state.editingFactureId);
+      state.editingFactureId = null;
+    } else {
+      await sb.from('factures').insert({
+        numero, devis_id: state.currentFacture.source_devis_id, client_id,
+        date_emission: dateEmission, date_echeance: dateEcheance || null,
+        mode_reglement: modeReglement, observations,
+        lignes, total_ht: sousHt, pieces,
+        remise_pct: remisePct, remise_montant: remiseMontant,
+        tva, total_ttc: ttc, statut_paiement: 'impaye',
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      });
+    }
+    // Si vient d'un devis, marquer celui-ci comme accepté
+    if (state.currentFacture.source_devis_id) {
+      await sb.from('devis').update({ statut: 'accepte' }).eq('id', state.currentFacture.source_devis_id);
+    }
+  } else {
+    if (state.editingDevisId) {
+      // MODE ÉDITION
+      await sb.from('devis').update({
+        client_id, date_emission: dateEmission,
+        grille: state.currentDevis.grille, lignes,
+        total_ht: sousHt, pieces, remise_pct: remisePct,
+        remise_montant: remiseMontant, tva, total_ttc: ttc,
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      }).eq('id', state.editingDevisId);
+      state.editingDevisId = null;
+    } else {
+      await sb.from('devis').insert({
+        numero, client_id, date_emission: dateEmission,
+        grille: state.currentDevis.grille, lignes,
+        total_ht: sousHt, pieces, remise_pct: remisePct,
+        remise_montant: remiseMontant, tva, total_ttc: ttc,
+        statut: 'envoye',
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      });
+    }
+  }
+
+  const safeName = (client.nom || 'client').replace(/[^a-z0-9]/gi, '_');
+  const docTitle = isFacture ? 'Facture' : 'Devis';
+  doc.save(`${docTitle}_${numero}_${safeName}_LaroscoTechnics.pdf`);
+
+  toast(`${docTitle} ${numero} généré ✓`, 'success');
+  setTimeout(() => { showScreen('home'); loadKPIs(); }, 1500);
 }
 
-/* ═════ STATUS MINI BADGE ═════ */
-.status-mini {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  margin-left: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+// ═══════════ TARIFS ═══════════
+function renderTarifs(filter = '') {
+  const container = document.getElementById('tarifs-list-container');
+  const q = filter.toLowerCase().trim();
+  const filtered = q
+    ? state.prestations.filter(p => p.ref.toLowerCase().includes(q) || (p.designation || '').toLowerCase().includes(q))
+    : state.prestations;
+  container.innerHTML = filtered.slice(0, 100).map(p => {
+    const isBmw = p.ref.startsWith('BMW');
+    return `<div class="tarif-item">
+      <div class="tarif-info">
+        <div class="tarif-ref ${isBmw ? 'bmw' : ''}">${p.ref}</div>
+        <div class="tarif-desig">${p.designation}</div>
+      </div>
+      <div class="tarif-prix">
+        ${isBmw
+          ? `<div class="tarif-prix-row">D <strong>${formatEUR(p.prix_d)}</strong></div>`
+          : `<div class="tarif-prix-row">B <strong>${formatEUR(p.prix_b)}</strong></div>
+             <div class="tarif-prix-row">C <strong>${formatEUR(p.prix_c)}</strong></div>`}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty-state"><div class="text">Aucun résultat</div></div>';
 }
-.status-mini.status-brouillon { background: rgba(180,180,180,0.2); color: var(--text-2); }
-.status-mini.status-envoye { background: rgba(243,156,18,0.2); color: var(--yellow); }
-.status-mini.status-accepte { background: rgba(39,174,96,0.2); color: var(--green); }
-.status-mini.status-refuse { background: rgba(192,57,43,0.2); color: var(--red); }
-.status-mini.status-paye { background: rgba(39,174,96,0.2); color: var(--green); }
-.status-mini.status-impaye { background: rgba(192,57,43,0.2); color: var(--red); }
+document.getElementById('tarifs-search').addEventListener('input', e => renderTarifs(e.target.value));
+
+// ═══════════ LISTES ═══════════
+async function loadDevisList() {
+  const c = document.getElementById('devis-list-container');
+  c.innerHTML = '<div class="empty-state">Chargement…</div>';
+  const { data } = await sb.from('devis').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
+  c.innerHTML = (data || []).map(d => {
+    const statusClass = 'status-' + d.statut;
+    const statusLabel = {brouillon:'Brouillon', envoye:'Envoyé', accepte:'Accepté', refuse:'Refusé', expire:'Expiré'}[d.statut] || d.statut;
+    return `<div class="doc-item" data-devis-id="${d.id}">
+      <div>
+        <div class="doc-num">${d.numero}</div>
+        <div class="doc-client">${d.clients?.nom || '—'}</div>
+        <div class="doc-date">${new Date(d.date_emission).toLocaleDateString('fr-FR')}</div>
+        <span class="doc-status ${statusClass}">${statusLabel}</span>
+      </div>
+      <div class="doc-price">${formatEUR(d.total_ttc)}</div>
+    </div>`;
+  }).join('') || '<div class="empty-state"><div class="icon">📋</div><div class="text">Aucun devis pour le moment</div></div>';
+
+  // Click → ouvrir modal détail
+  c.querySelectorAll('.doc-item').forEach(item => {
+    item.addEventListener('click', async () => {
+      const id = item.dataset.devisId;
+      const devis = (data || []).find(d => String(d.id) === id);
+      if (devis) openDevisModal(devis);
+    });
+  });
+}
+
+async function loadFacturesList() {
+  const c = document.getElementById('factures-list-container');
+  c.innerHTML = '<div class="empty-state">Chargement…</div>';
+  const { data } = await sb.from('factures').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
+  c.innerHTML = (data || []).map(f => {
+    const statusClass = f.statut_paiement === 'paye' ? 'status-paye' : f.statut_paiement === 'partiel' ? 'status-attente' : 'status-impaye';
+    const statusLabel = f.statut_paiement === 'paye' ? 'Payé' : f.statut_paiement === 'partiel' ? 'Partiel' : 'Impayé';
+    return `<div class="doc-item">
+      <div>
+        <div class="doc-num">${f.numero}</div>
+        <div class="doc-client">${f.clients?.nom || '—'}</div>
+        <div class="doc-date">${new Date(f.date_emission).toLocaleDateString('fr-FR')}</div>
+        <span class="doc-status ${statusClass}">${statusLabel}</span>
+      </div>
+      <div class="doc-price">${formatEUR(f.total_ttc)}</div>
+    </div>`;
+  }).join('') || '<div class="empty-state"><div class="icon">🧾</div><div class="text">Aucune facture pour le moment</div></div>';
+}
+
+async function loadClientsList() {
+  const c = document.getElementById('clients-list-container');
+  c.innerHTML = '<div class="empty-state">Chargement…</div>';
+  const { data } = await sb.from('clients').select('*').order('nom').limit(200);
+
+  // Recherche
+  const search = document.getElementById('clients-search');
+  let allClients = data || [];
+
+  function renderClients(filter = '') {
+    const q = filter.toLowerCase().trim();
+    const filtered = q
+      ? allClients.filter(cl => (cl.nom || '').toLowerCase().includes(q) || (cl.telephone || '').includes(q) || (cl.commune || '').toLowerCase().includes(q))
+      : allClients;
+    c.innerHTML = filtered.map(cl => `
+      <div class="doc-item" data-client-id="${cl.id}">
+        <div style="flex:1">
+          <div class="doc-num">${cl.nom}</div>
+          <div class="doc-client">${cl.telephone || '—'} ${cl.commune ? '· ' + cl.commune : ''}</div>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    `).join('') || '<div class="empty-state"><div class="icon">👥</div><div class="text">Aucun client</div></div>';
+
+    c.querySelectorAll('.doc-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const id = parseInt(item.dataset.clientId);
+        const cl = allClients.find(x => x.id === id);
+        if (cl) openClientModal(cl);
+      });
+    });
+  }
+
+  renderClients();
+  if (search) {
+    search.value = '';
+    search.oninput = (e) => renderClients(e.target.value);
+  }
+}
+
+// ═══════════ MODAL CLIENT ═══════════
+let currentModalClient = null;
+let currentModalClientLastVehicle = null;
+
+async function openClientModal(client) {
+  currentModalClient = client;
+  document.getElementById('modal-client-nom').textContent = client.nom;
+  document.getElementById('modal-client-body').innerHTML = '<div class="empty-state">Chargement…</div>';
+  document.getElementById('modal-client').classList.add('show');
+
+  // Récupérer en parallèle : devis et factures du client
+  const [devisRes, factRes] = await Promise.all([
+    sb.from('devis').select('*').eq('client_id', client.id).order('date_emission', { ascending: false }),
+    sb.from('factures').select('*').eq('client_id', client.id).order('date_emission', { ascending: false })
+  ]);
+  const devis = devisRes.data || [];
+  const factures = factRes.data || [];
+
+  // Statistiques
+  const nbInterventions = factures.length;
+  const caTotal = factures.reduce((s, f) => s + (parseFloat(f.total_ttc) || 0), 0);
+  const panierMoyen = nbInterventions > 0 ? caTotal / nbInterventions : 0;
+  const lastVisit = factures[0]?.date_emission || devis[0]?.date_emission;
+
+  // Véhicules uniques (depuis devis + factures)
+  const vehiculesMap = new Map();
+  [...devis, ...factures].forEach(d => {
+    if (d.vehicule_immat) {
+      vehiculesMap.set(d.vehicule_immat, {
+        nom: d.vehicule_nom,
+        immat: d.vehicule_immat,
+        km: d.vehicule_km,
+        last_seen: d.date_emission
+      });
+    }
+  });
+  const vehicules = Array.from(vehiculesMap.values()).sort((a, b) =>
+    new Date(b.last_seen) - new Date(a.last_seen)
+  );
+
+  // Garder le dernier véhicule pour pré-remplissage
+  currentModalClientLastVehicle = vehicules[0] || null;
+
+  // Construire le HTML
+  let html = `
+    <div class="modal-section">
+      <div class="modal-label">Coordonnées</div>
+      <div class="modal-value">📞 ${client.telephone || '—'}</div>
+      <div class="modal-value" style="margin-top:4px">📍 ${client.adresse || '—'} ${client.commune ? '· ' + client.commune : ''}</div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-label">Statistiques</div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-value">${nbInterventions}</div>
+          <div class="stat-label">Interventions</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${formatEUR(caTotal)}</div>
+          <div class="stat-label">CA total</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${formatEUR(panierMoyen)}</div>
+          <div class="stat-label">Panier moyen</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="font-size:13px">${lastVisit ? new Date(lastVisit).toLocaleDateString('fr-FR') : '—'}</div>
+          <div class="stat-label">Dernière visite</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Véhicules
+  if (vehicules.length > 0) {
+    html += `
+      <div class="modal-section">
+        <div class="modal-label">Véhicules (${vehicules.length})</div>
+        ${vehicules.map((v, idx) => `
+          <div class="vehicle-item ${idx === 0 ? 'vehicle-active' : ''}" data-vehicle-idx="${idx}">
+            <div>
+              <div style="font-weight:600">${v.nom || '—'}</div>
+              <div style="font-size:12px;color:var(--text-2)">${v.immat || '—'} ${v.km ? '· ' + v.km + ' km' : ''}</div>
+            </div>
+            ${idx === 0 ? '<span class="badge-dernier">DERNIER</span>' : ''}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Historique devis
+  if (devis.length > 0) {
+    html += `
+      <div class="modal-section">
+        <div class="modal-label">Devis (${devis.length})</div>
+        ${devis.slice(0, 10).map(d => `
+          <div class="modal-prest-row">
+            <div>
+              <div class="ref">${d.numero}</div>
+              <div class="desig">${new Date(d.date_emission).toLocaleDateString('fr-FR')} · <span class="status-mini status-${d.statut}">${d.statut}</span></div>
+            </div>
+            <div class="price">${formatEUR(d.total_ttc)}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Historique factures
+  if (factures.length > 0) {
+    html += `
+      <div class="modal-section">
+        <div class="modal-label">Factures (${factures.length})</div>
+        ${factures.slice(0, 10).map(f => {
+          const stCls = f.statut_paiement === 'paye' ? 'status-paye' : 'status-impaye';
+          return `<div class="modal-prest-row">
+            <div>
+              <div class="ref">${f.numero}</div>
+              <div class="desig">${new Date(f.date_emission).toLocaleDateString('fr-FR')} · <span class="status-mini ${stCls}">${f.statut_paiement}</span></div>
+            </div>
+            <div class="price">${formatEUR(f.total_ttc)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // Données vehicules cliquables
+  document.getElementById('modal-client-body').innerHTML = html;
+
+  // Click sur véhicule = le sélectionner
+  document.querySelectorAll('.vehicle-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.vehicle-item').forEach(v => v.classList.remove('vehicle-active'));
+      el.classList.add('vehicle-active');
+      const idx = parseInt(el.dataset.vehicleIdx);
+      currentModalClientLastVehicle = vehicules[idx];
+    });
+  });
+}
+
+document.getElementById('modal-client-close-btn').addEventListener('click', () => {
+  document.getElementById('modal-client').classList.remove('show');
+});
+document.getElementById('modal-client').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-client') {
+    document.getElementById('modal-client').classList.remove('show');
+  }
+});
+
+// Bouton + Devis depuis fiche client
+document.getElementById('btn-client-new-devis').addEventListener('click', () => {
+  if (!currentModalClient) return;
+  document.getElementById('modal-client').classList.remove('show');
+  resetDevisForm();
+  showScreen('new-devis');
+  setTimeout(() => prefillFromClient('d'), 100);
+});
+
+// Bouton + Facture depuis fiche client
+document.getElementById('btn-client-new-facture').addEventListener('click', () => {
+  if (!currentModalClient) return;
+  document.getElementById('modal-client').classList.remove('show');
+  resetFactureForm();
+  showScreen('new-facture');
+  setTimeout(() => prefillFromClient('f'), 100);
+});
+
+function prefillFromClient(prefix) {
+  const cl = currentModalClient;
+  const v = currentModalClientLastVehicle;
+  if (!cl) return;
+
+  document.getElementById(prefix + '-client-nom').value = cl.nom || '';
+  document.getElementById(prefix + '-client-tel').value = cl.telephone || '';
+  document.getElementById(prefix + '-client-commune').value = cl.commune || '';
+  document.getElementById(prefix + '-client-adresse').value = cl.adresse || '';
+
+  if (v) {
+    document.getElementById(prefix + '-vehicule').value = v.nom || '';
+    document.getElementById(prefix + '-immat').value = v.immat || '';
+    document.getElementById(prefix + '-km').value = v.km || '';
+  }
+
+  toast('Fiche ' + cl.nom + ' chargée', 'success');
+}
+
+// ═══════════ MODAL DEVIS ═══════════
+let currentModalDevis = null;
+
+function openDevisModal(devis) {
+  currentModalDevis = devis;
+  document.getElementById('modal-devis-num').textContent = devis.numero;
+  document.getElementById('modal-devis-statut').value = devis.statut;
+
+  const clientNom = devis.clients?.nom || '—';
+  const lignesHtml = (devis.lignes || []).map(l => `
+    <div class="modal-prest-row">
+      <div>
+        <div class="ref">${l.ref}</div>
+        <div class="desig">${l.designation} × ${l.qte}</div>
+      </div>
+      <div class="price">${formatEUR(l.montant)}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-devis-body').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-label">Client</div>
+      <div class="modal-value">${clientNom}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Véhicule</div>
+      <div class="modal-value">${devis.vehicule_nom || '—'} ${devis.vehicule_immat ? '· ' + devis.vehicule_immat : ''} ${devis.vehicule_km ? '· ' + devis.vehicule_km + ' km' : ''}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Date · Grille</div>
+      <div class="modal-value">${new Date(devis.date_emission).toLocaleDateString('fr-FR')} · ${devis.grille}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Prestations</div>
+      ${lignesHtml}
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Totaux</div>
+      <div class="modal-value">HT ${formatEUR(devis.total_ht)} · TVA ${formatEUR(devis.tva)} · TTC <strong style="color:var(--accent)">${formatEUR(devis.total_ttc)}</strong></div>
+      ${devis.remise_pct > 0 ? `<div class="modal-value" style="color:var(--red)">Remise ${devis.remise_pct}% : -${formatEUR(devis.remise_montant)}</div>` : ''}
+    </div>
+  `;
+
+  document.getElementById('modal-devis').classList.add('show');
+}
+
+document.getElementById('modal-close-btn').addEventListener('click', () => {
+  document.getElementById('modal-devis').classList.remove('show');
+});
+document.getElementById('modal-devis').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-devis') {
+    document.getElementById('modal-devis').classList.remove('show');
+  }
+});
+
+// Changer statut
+document.getElementById('modal-devis-statut').addEventListener('change', async (e) => {
+  if (!currentModalDevis) return;
+  const newStatut = e.target.value;
+  const { error } = await sb.from('devis').update({ statut: newStatut }).eq('id', currentModalDevis.id);
+  if (error) { toast('Erreur mise à jour', 'error'); return; }
+  currentModalDevis.statut = newStatut;
+  toast('Statut mis à jour ✓', 'success');
+  loadKPIs();
+});
+
+// Convertir en facture
+document.getElementById('btn-convert-facture').addEventListener('click', () => {
+  if (!currentModalDevis) return;
+  const devis = currentModalDevis;
+  document.getElementById('modal-devis').classList.remove('show');
+  resetFactureForm();
+  showScreen('new-facture');
+  setTimeout(() => prefillFactureFromDevis(devis), 100);
+});
+
+// ═══════════ HELPERS ═══════════
+function formatEUR(v) {
+  if (!v && v !== 0) return '—';
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+}
+function toast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
 
 
-/* ═════ MODAL FOOTER WRAP (ligne par ligne) ═════ */
-.modal-footer-wrap {
-  padding: 14px 20px calc(14px + var(--safe-bottom));
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+// ═══════════════════════════════════════════════════════════════════
+// ÉDITION & SUPPRESSION
+// ═══════════════════════════════════════════════════════════════════
+
+// ═══════════ SUPPRESSION CLIENT ═══════════
+document.getElementById('btn-delete-client').addEventListener('click', async () => {
+  if (!currentModalClient) return;
+  if (!confirm(`Supprimer définitivement le client "${currentModalClient.nom}" ?\n\n⚠️ Ses devis et factures resteront mais ne seront plus liés à un client.`)) return;
+
+  const { error } = await sb.from('clients').delete().eq('id', currentModalClient.id);
+  if (error) { toast('Erreur suppression', 'error'); return; }
+  toast('Client supprimé', 'success');
+  document.getElementById('modal-client').classList.remove('show');
+  loadClientsList();
+  loadKPIs();
+});
+
+// ═══════════ ÉDITION CLIENT ═══════════
+document.getElementById('btn-edit-client').addEventListener('click', () => {
+  if (!currentModalClient) return;
+  document.getElementById('edit-client-nom').value = currentModalClient.nom || '';
+  document.getElementById('edit-client-tel').value = currentModalClient.telephone || '';
+  document.getElementById('edit-client-adresse').value = currentModalClient.adresse || '';
+  document.getElementById('edit-client-commune').value = currentModalClient.commune || '';
+  document.getElementById('edit-client-email').value = currentModalClient.email || '';
+  document.getElementById('modal-edit-client').classList.add('show');
+});
+
+document.getElementById('btn-cancel-edit-client').addEventListener('click', () => {
+  document.getElementById('modal-edit-client').classList.remove('show');
+});
+document.getElementById('modal-edit-client-close').addEventListener('click', () => {
+  document.getElementById('modal-edit-client').classList.remove('show');
+});
+
+document.getElementById('btn-save-edit-client').addEventListener('click', async () => {
+  if (!currentModalClient) return;
+  const updated = {
+    nom: document.getElementById('edit-client-nom').value.trim(),
+    telephone: document.getElementById('edit-client-tel').value.trim(),
+    adresse: document.getElementById('edit-client-adresse').value.trim(),
+    commune: document.getElementById('edit-client-commune').value.trim(),
+    email: document.getElementById('edit-client-email').value.trim()
+  };
+  const { error } = await sb.from('clients').update(updated).eq('id', currentModalClient.id);
+  if (error) { toast('Erreur', 'error'); return; }
+  toast('Client mis à jour', 'success');
+  document.getElementById('modal-edit-client').classList.remove('show');
+  document.getElementById('modal-client').classList.remove('show');
+  loadClientsList();
+});
+
+// ═══════════ SUPPRESSION DEVIS ═══════════
+document.getElementById('btn-delete-devis').addEventListener('click', async () => {
+  if (!currentModalDevis) return;
+  if (!confirm(`Supprimer définitivement le devis ${currentModalDevis.numero} ?`)) return;
+
+  const { error } = await sb.from('devis').delete().eq('id', currentModalDevis.id);
+  if (error) { toast('Erreur suppression', 'error'); return; }
+  toast('Devis supprimé', 'success');
+  document.getElementById('modal-devis').classList.remove('show');
+  loadDevisList();
+  loadKPIs();
+});
+
+// ═══════════ ÉDITION DEVIS ═══════════
+document.getElementById('btn-edit-devis').addEventListener('click', async () => {
+  if (!currentModalDevis) return;
+  const devis = currentModalDevis;
+
+  document.getElementById('modal-devis').classList.remove('show');
+
+  // Reset form puis pré-remplir avec le devis existant
+  resetDevisForm();
+  showScreen('new-devis');
+
+  // Petit délai pour laisser le DOM se mettre à jour
+  await new Promise(r => setTimeout(r, 100));
+
+  // Mode édition
+  state.editingDevisId = devis.id;
+  state.editingDevisNumero = devis.numero;
+
+  // Pré-remplir client
+  if (devis.client_id) {
+    const { data: cl } = await sb.from('clients').select('*').eq('id', devis.client_id).maybeSingle();
+    if (cl) {
+      document.getElementById('d-client-nom').value = cl.nom || '';
+      document.getElementById('d-client-tel').value = cl.telephone || '';
+      document.getElementById('d-client-commune').value = cl.commune || '';
+      document.getElementById('d-client-adresse').value = cl.adresse || '';
+    }
+  }
+
+  // Véhicule
+  document.getElementById('d-vehicule').value = devis.vehicule_nom || '';
+  document.getElementById('d-immat').value = devis.vehicule_immat || '';
+  document.getElementById('d-km').value = devis.vehicule_km || '';
+
+  // Pieces / remise
+  state.currentDevis.pieces = parseFloat(devis.pieces) || 0;
+  state.currentDevis.remise_pct = parseFloat(devis.remise_pct) || 0;
+  state.currentDevis.grille = devis.grille;
+  document.getElementById('d-pieces').value = state.currentDevis.pieces;
+  document.getElementById('d-remise').value = state.currentDevis.remise_pct;
+
+  // Boutons remise
+  document.querySelectorAll('#screen-new-devis .rem-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.rem) === state.currentDevis.remise_pct);
+  });
+
+  // Grille
+  document.querySelectorAll('#screen-new-devis .grille-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.grille === devis.grille));
+
+  // Lignes
+  document.getElementById('prestations-list').innerHTML = '';
+  for (const lig of (devis.lignes || [])) {
+    addPrestationRow('d', lig);
+  }
+
+  // Changer le titre
+  document.getElementById('devis-title').textContent = `Modifier ${devis.numero}`;
+
+  updateTotals('d');
+  toast('Mode édition de ' + devis.numero, '');
+});
+
+// ═══════════ MODAL FACTURE ═══════════
+let currentModalFacture = null;
+
+async function openFactureModal(facture) {
+  currentModalFacture = facture;
+  document.getElementById('modal-facture-num').textContent = facture.numero;
+  document.getElementById('modal-facture-statut').value = facture.statut_paiement;
+
+  const clientNom = facture.clients?.nom || '—';
+  const lignesHtml = (facture.lignes || []).map(l => `
+    <div class="modal-prest-row">
+      <div>
+        <div class="ref">${l.ref}</div>
+        <div class="desig">${l.designation} × ${l.qte}</div>
+      </div>
+      <div class="price">${formatEUR(l.montant)}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-facture-body').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-label">Client</div>
+      <div class="modal-value">${clientNom}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Véhicule</div>
+      <div class="modal-value">${facture.vehicule_nom || '—'} ${facture.vehicule_immat ? '· ' + facture.vehicule_immat : ''} ${facture.vehicule_km ? '· ' + facture.vehicule_km + ' km' : ''}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Date · Échéance · Règlement</div>
+      <div class="modal-value">${new Date(facture.date_emission).toLocaleDateString('fr-FR')} · ${facture.date_echeance ? new Date(facture.date_echeance).toLocaleDateString('fr-FR') : '—'} · ${facture.mode_reglement || '—'}</div>
+    </div>
+    ${facture.observations ? `<div class="modal-section"><div class="modal-label">Observations</div><div class="modal-value">${facture.observations}</div></div>` : ''}
+    <div class="modal-section">
+      <div class="modal-label">Prestations</div>
+      ${lignesHtml}
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Totaux</div>
+      <div class="modal-value">HT ${formatEUR(facture.total_ht)} · TVA ${formatEUR(facture.tva)} · TTC <strong style="color:var(--accent)">${formatEUR(facture.total_ttc)}</strong></div>
+      ${facture.remise_pct > 0 ? `<div class="modal-value" style="color:var(--red)">Remise ${facture.remise_pct}% : -${formatEUR(facture.remise_montant)}</div>` : ''}
+    </div>
+  `;
+
+  document.getElementById('modal-facture').classList.add('show');
 }
-.modal-footer-actions {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-.modal-footer-actions .btn-primary,
-.modal-footer-actions .btn-secondary {
-  flex: 1;
-}
-.btn-icon-danger {
-  background: rgba(192, 57, 43, 0.15);
-  color: var(--red);
-  border: 1.5px solid rgba(192, 57, 43, 0.4);
-  padding: 14px 16px;
-  border-radius: 12px;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-.btn-icon-danger:active {
-  background: var(--red);
-  color: white;
-  transform: scale(0.95);
-}
+
+document.getElementById('modal-facture-close-btn').addEventListener('click', () => {
+  document.getElementById('modal-facture').classList.remove('show');
+});
+document.getElementById('modal-facture').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-facture') {
+    document.getElementById('modal-facture').classList.remove('show');
+  }
+});
+
+// Changer statut paiement
+document.getElementById('modal-facture-statut').addEventListener('change', async (e) => {
+  if (!currentModalFacture) return;
+  const newStatut = e.target.value;
+  const { error } = await sb.from('factures').update({ statut_paiement: newStatut }).eq('id', currentModalFacture.id);
+  if (error) { toast('Erreur', 'error'); return; }
+  currentModalFacture.statut_paiement = newStatut;
+  toast('Statut paiement mis à jour', 'success');
+  loadKPIs();
+});
+
+// Suppression facture
+document.getElementById('btn-delete-facture').addEventListener('click', async () => {
+  if (!currentModalFacture) return;
+  if (!confirm(`Supprimer définitivement la facture ${currentModalFacture.numero} ?`)) return;
+  const { error } = await sb.from('factures').delete().eq('id', currentModalFacture.id);
+  if (error) { toast('Erreur', 'error'); return; }
+  toast('Facture supprimée', 'success');
+  document.getElementById('modal-facture').classList.remove('show');
+  loadFacturesList();
+  loadKPIs();
+});
+
+// Édition facture
+document.getElementById('btn-edit-facture').addEventListener('click', async () => {
+  if (!currentModalFacture) return;
+  const facture = currentModalFacture;
+  document.getElementById('modal-facture').classList.remove('show');
+
+  resetFactureForm();
+  showScreen('new-facture');
+  await new Promise(r => setTimeout(r, 100));
+
+  state.editingFactureId = facture.id;
+  state.editingFactureNumero = facture.numero;
+
+  if (facture.client_id) {
+    const { data: cl } = await sb.from('clients').select('*').eq('id', facture.client_id).maybeSingle();
+    if (cl) {
+      document.getElementById('f-client-nom').value = cl.nom || '';
+      document.getElementById('f-client-tel').value = cl.telephone || '';
+      document.getElementById('f-client-commune').value = cl.commune || '';
+      document.getElementById('f-client-adresse').value = cl.adresse || '';
+    }
+  }
+
+  document.getElementById('f-vehicule').value = facture.vehicule_nom || '';
+  document.getElementById('f-immat').value = facture.vehicule_immat || '';
+  document.getElementById('f-km').value = facture.vehicule_km || '';
+  document.getElementById('f-date').value = facture.date_emission || '';
+  document.getElementById('f-echeance').value = facture.date_echeance || '';
+  document.getElementById('f-reglement').value = facture.mode_reglement || 'Espèces';
+  document.getElementById('f-observations').value = facture.observations || '';
+
+  state.currentFacture.pieces = parseFloat(facture.pieces) || 0;
+  state.currentFacture.remise_pct = parseFloat(facture.remise_pct) || 0;
+  state.currentFacture.grille = facture.grille || 'B';
+  document.getElementById('f-pieces').value = state.currentFacture.pieces;
+  document.getElementById('f-remise').value = state.currentFacture.remise_pct;
+
+  document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.rem) === state.currentFacture.remise_pct);
+  });
+
+  document.getElementById('prestations-list-f').innerHTML = '';
+  for (const lig of (facture.lignes || [])) {
+    addPrestationRow('f', lig);
+  }
+
+  document.getElementById('facture-title').textContent = `Modifier ${facture.numero}`;
+  updateTotals('f');
+  toast('Mode édition de ' + facture.numero, '');
+});
+
+// ═══════════ Patch loadFacturesList pour rendre cliquable ═══════════
+const originalLoadFactures = loadFacturesList;
+loadFacturesList = async function() {
+  const c = document.getElementById('factures-list-container');
+  c.innerHTML = '<div class="empty-state">Chargement…</div>';
+  const { data } = await sb.from('factures').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
+  c.innerHTML = (data || []).map(f => {
+    const statusClass = f.statut_paiement === 'paye' ? 'status-paye' : f.statut_paiement === 'partiel' ? 'status-attente' : 'status-impaye';
+    const statusLabel = f.statut_paiement === 'paye' ? 'Payé' : f.statut_paiement === 'partiel' ? 'Partiel' : 'Impayé';
+    return `<div class="doc-item" data-facture-id="${f.id}">
+      <div>
+        <div class="doc-num">${f.numero}</div>
+        <div class="doc-client">${f.clients?.nom || '—'}</div>
+        <div class="doc-date">${new Date(f.date_emission).toLocaleDateString('fr-FR')}</div>
+        <span class="doc-status ${statusClass}">${statusLabel}</span>
+      </div>
+      <div class="doc-price">${formatEUR(f.total_ttc)}</div>
+    </div>`;
+  }).join('') || '<div class="empty-state"><div class="icon">🧾</div><div class="text">Aucune facture</div></div>';
+
+  c.querySelectorAll('.doc-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = parseInt(item.dataset.factureId);
+      const f = (data || []).find(x => x.id === id);
+      if (f) openFactureModal(f);
+    });
+  });
+};
