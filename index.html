@@ -246,7 +246,10 @@
 <section id="screen-tarifs" class="screen">
   <header class="topbar">
     <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
-    <div class="topbar-title">Base tarifs</div><div style="width:32px"></div>
+    <div class="topbar-title">Base tarifs</div>
+    <button class="icon-btn" id="btn-add-tarif" aria-label="Nouveau tarif" style="background:var(--accent);border-radius:8px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
   </header>
   <main class="page">
     <input type="search" id="tarifs-search" class="search-input" placeholder="Rechercher une référence...">
@@ -455,6 +458,82 @@
     <div class="modal-footer">
       <button class="btn-secondary" id="btn-cancel-edit-client">Annuler</button>
       <button class="btn-primary" id="btn-save-edit-client">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ MODAL TARIF (création/édition) ═══════════════ -->
+<div id="modal-tarif" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3 id="modal-tarif-title">Nouveau tarif</h3>
+      <button class="modal-close" id="modal-tarif-close">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Marque</span>
+        <select id="tarif-marque" class="select-input">
+          <option value="Toutes Marques">Toutes Marques</option>
+          <option value="BMW">BMW</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Catégorie</span>
+        <select id="tarif-categorie" class="select-input">
+          <option value="Déplacement">Déplacement</option>
+          <option value="Diagnostic">Diagnostic</option>
+          <option value="Entretien">Entretien</option>
+          <option value="Mécanique / Moteur">Mécanique / Moteur</option>
+          <option value="Transmission / Embrayage">Transmission / Embrayage</option>
+          <option value="Freinage">Freinage</option>
+          <option value="Suspension">Suspension</option>
+          <option value="Climatisation">Climatisation</option>
+          <option value="Électrique">Électrique</option>
+          <option value="Vitrage / Carrosserie élec.">Vitrage / Carrosserie élec.</option>
+          <option value="Carrosserie / Optiques">Carrosserie / Optiques</option>
+          <option value="Nettoyage auto">Nettoyage auto</option>
+          <option value="Entretien avancé">Entretien avancé (BMW)</option>
+          <option value="Freinage avancé">Freinage avancé (BMW)</option>
+          <option value="Suspension avancée">Suspension avancée (BMW)</option>
+          <option value="BMW Spécifique">BMW Spécifique</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Référence</span>
+        <input type="text" id="tarif-ref" placeholder="Auto-générée si vide" style="text-transform:uppercase">
+        <small style="font-size:11px;color:var(--text-3);margin-top:4px">Laisse vide pour génération auto (ex: TM-MEC-20)</small>
+      </label>
+      <label class="field">
+        <span>Désignation</span>
+        <input type="text" id="tarif-desig" placeholder="Ex: Remplacement filtre à air">
+      </label>
+      <div class="row-2">
+        <label class="field">
+          <span>Prix B (Standard)</span>
+          <input type="number" id="tarif-prix-b" placeholder="0" min="0" step="10">
+        </label>
+        <label class="field">
+          <span>Prix C (Intermédiaire)</span>
+          <input type="number" id="tarif-prix-c" placeholder="Auto si vide" min="0" step="10">
+        </label>
+      </div>
+      <label class="field">
+        <span>Prix D (BMW Premium)</span>
+        <input type="number" id="tarif-prix-d" placeholder="Si BMW uniquement" min="0" step="10">
+      </label>
+      <small style="font-size:11px;color:var(--text-3)">
+        💡 Si Prix C est vide, il sera calculé automatiquement à Prix B × 1.25 arrondi à la dizaine.
+      </small>
+    </div>
+    <div class="modal-footer-wrap">
+      <div class="modal-footer-actions" id="tarif-edit-actions" style="display:none">
+        <button class="btn-icon-danger" id="btn-delete-tarif" title="Supprimer">🗑️</button>
+      </div>
+      <div class="modal-footer-actions">
+        <button class="btn-secondary" id="btn-cancel-tarif">Annuler</button>
+        <button class="btn-primary" id="btn-save-tarif">Enregistrer</button>
+      </div>
     </div>
   </div>
 </div>
