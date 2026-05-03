@@ -237,7 +237,10 @@
     <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
     <div class="topbar-title">Clients</div><div style="width:32px"></div>
   </header>
-  <main class="page"><div id="clients-list-container"></div></main>
+  <main class="page">
+    <input type="search" id="clients-search" class="search-input" placeholder="Rechercher un client...">
+    <div id="clients-list-container"></div>
+  </main>
 </section>
 
 <section id="screen-tarifs" class="screen">
@@ -381,6 +384,22 @@
         <option value="expire">Expiré</option>
       </select>
       <button class="btn-primary" id="btn-convert-facture">→ Convertir en facture</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ MODAL FICHE CLIENT ═══════════════ -->
+<div id="modal-client" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3 id="modal-client-nom">Client</h3>
+      <button class="modal-close" id="modal-client-close-btn">×</button>
+    </div>
+    <div class="modal-body" id="modal-client-body"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btn-client-new-devis">+ Devis</button>
+      <button class="btn-primary" id="btn-client-new-facture">+ Facture</button>
     </div>
   </div>
 </div>
