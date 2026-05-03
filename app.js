@@ -43,50 +43,11 @@ document.addEventListener('click', (e) => {
 });
 
 // ═══════════ AUTH ═══════════
-async function checkAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    state.user = session.user;
-    showScreen('home');
-    await loadPrestations();
-    await loadKPIs();
-  } else {
-    showScreen('login');
-  }
-}
-
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
-  const errEl = document.getElementById('login-error');
-  const btn = document.getElementById('btn-login');
-
-  errEl.textContent = '';
-  btn.disabled = true;
-  btn.textContent = 'Connexion…';
-
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-
-  btn.disabled = false;
-  btn.textContent = 'Se connecter';
-
-  if (error) {
-    errEl.textContent = 'Email ou mot de passe incorrect';
-    return;
-  }
-
-  state.user = data.user;
+async function init() {
   showScreen('home');
   await loadPrestations();
   await loadKPIs();
-});
-
-document.getElementById('btn-logout').addEventListener('click', async () => {
-  await sb.auth.signOut();
-  state.user = null;
-  showScreen('login');
-});
+}
 
 // ═══════════ CHARGEMENT DONNÉES ═══════════
 async function loadPrestations() {
@@ -656,4 +617,4 @@ document.querySelector('[data-screen="new-facture"]').addEventListener('click', 
 }, true);
 
 // ═══════════ INIT ═══════════
-window.addEventListener('load', checkAuth);
+window.addEventListener('load', init);
