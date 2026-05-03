@@ -730,7 +730,7 @@ async function loadFacturesList() {
   c.innerHTML = (data || []).map(f => {
     const statusClass = f.statut_paiement === 'paye' ? 'status-paye' : f.statut_paiement === 'partiel' ? 'status-attente' : 'status-impaye';
     const statusLabel = f.statut_paiement === 'paye' ? 'Payé' : f.statut_paiement === 'partiel' ? 'Partiel' : 'Impayé';
-    return `<div class="doc-item">
+    return `<div class="doc-item" data-facture-id="${f.id}">
       <div>
         <div class="doc-num">${f.numero}</div>
         <div class="doc-client">${f.clients?.nom || '—'}</div>
@@ -740,6 +740,15 @@ async function loadFacturesList() {
       <div class="doc-price">${formatEUR(f.total_ttc)}</div>
     </div>`;
   }).join('') || '<div class="empty-state"><div class="icon">🧾</div><div class="text">Aucune facture pour le moment</div></div>';
+
+  // Click sur facture = ouvrir modal
+  c.querySelectorAll('.doc-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = parseInt(item.dataset.factureId);
+      const f = (data || []).find(x => x.id === id);
+      if (f && typeof openFactureModal === 'function') openFactureModal(f);
+    });
+  });
 }
 
 async function loadClientsList() {
@@ -1317,32 +1326,3 @@ document.getElementById('btn-edit-facture').addEventListener('click', async () =
   updateTotals('f');
   toast('Mode édition de ' + facture.numero, '');
 });
-
-// ═══════════ Patch loadFacturesList pour rendre cliquable ═══════════
-const originalLoadFactures = loadFacturesList;
-loadFacturesList = async function() {
-  const c = document.getElementById('factures-list-container');
-  c.innerHTML = '<div class="empty-state">Chargement…</div>';
-  const { data } = await sb.from('factures').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
-  c.innerHTML = (data || []).map(f => {
-    const statusClass = f.statut_paiement === 'paye' ? 'status-paye' : f.statut_paiement === 'partiel' ? 'status-attente' : 'status-impaye';
-    const statusLabel = f.statut_paiement === 'paye' ? 'Payé' : f.statut_paiement === 'partiel' ? 'Partiel' : 'Impayé';
-    return `<div class="doc-item" data-facture-id="${f.id}">
-      <div>
-        <div class="doc-num">${f.numero}</div>
-        <div class="doc-client">${f.clients?.nom || '—'}</div>
-        <div class="doc-date">${new Date(f.date_emission).toLocaleDateString('fr-FR')}</div>
-        <span class="doc-status ${statusClass}">${statusLabel}</span>
-      </div>
-      <div class="doc-price">${formatEUR(f.total_ttc)}</div>
-    </div>`;
-  }).join('') || '<div class="empty-state"><div class="icon">🧾</div><div class="text">Aucune facture</div></div>';
-
-  c.querySelectorAll('.doc-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const id = parseInt(item.dataset.factureId);
-      const f = (data || []).find(x => x.id === id);
-      if (f) openFactureModal(f);
-    });
-  });
-};
