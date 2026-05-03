@@ -6,6 +6,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const state = {
   prestations: [],
+  editingDevisId: null,
+  editingFactureId: null,
   currentDevis: { grille: 'B', lignes: [], pieces: 0, remise_pct: 0 },
   currentFacture: { grille: 'B', lignes: [], pieces: 0, remise_pct: 0, source_devis_id: null }
 };
@@ -76,6 +78,8 @@ async function loadKPIs() {
 // ═══════════ DEVIS — FORM ═══════════
 function resetDevisForm() {
   state.currentDevis = { grille: 'B', lignes: [], pieces: 0, remise_pct: 0 };
+  state.editingDevisId = null;
+  document.getElementById('devis-title').textContent = 'Nouveau devis';
   document.querySelectorAll('#screen-new-devis input').forEach(i => {
     if (i.type === 'number') i.value = (i.id === 'd-remise' || i.id === 'd-pieces') ? 0 : '';
     else i.value = '';
@@ -123,6 +127,8 @@ document.getElementById('btn-add-prestation').addEventListener('click', () => ad
 // ═══════════ FACTURE — FORM ═══════════
 function resetFactureForm(prefillFromDevis = null) {
   state.currentFacture = { grille: 'B', lignes: [], pieces: 0, remise_pct: 0, source_devis_id: null };
+  state.editingFactureId = null;
+  document.getElementById('facture-title').textContent = 'Nouvelle facture';
 
   document.querySelectorAll('#screen-new-facture input').forEach(i => {
     if (i.type === 'number') i.value = (i.id === 'f-remise' || i.id === 'f-pieces') ? 0 : '';
@@ -606,28 +612,53 @@ async function generatePDF(type) {
   }
 
   if (isFacture) {
-    await sb.from('factures').insert({
-      numero, devis_id: state.currentFacture.source_devis_id, client_id,
-      date_emission: dateEmission, date_echeance: dateEcheance || null,
-      mode_reglement: modeReglement, observations,
-      lignes, total_ht: sousHt, pieces,
-      remise_pct: remisePct, remise_montant: remiseMontant,
-      tva, total_ttc: ttc, statut_paiement: 'impaye',
-      vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
-    });
+    if (state.editingFactureId) {
+      await sb.from('factures').update({
+        client_id, date_emission: dateEmission,
+        date_echeance: dateEcheance || null,
+        mode_reglement: modeReglement, observations,
+        lignes, total_ht: sousHt, pieces,
+        remise_pct: remisePct, remise_montant: remiseMontant,
+        tva, total_ttc: ttc,
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      }).eq('id', state.editingFactureId);
+      state.editingFactureId = null;
+    } else {
+      await sb.from('factures').insert({
+        numero, devis_id: state.currentFacture.source_devis_id, client_id,
+        date_emission: dateEmission, date_echeance: dateEcheance || null,
+        mode_reglement: modeReglement, observations,
+        lignes, total_ht: sousHt, pieces,
+        remise_pct: remisePct, remise_montant: remiseMontant,
+        tva, total_ttc: ttc, statut_paiement: 'impaye',
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      });
+    }
     // Si vient d'un devis, marquer celui-ci comme accepté
     if (state.currentFacture.source_devis_id) {
       await sb.from('devis').update({ statut: 'accepte' }).eq('id', state.currentFacture.source_devis_id);
     }
   } else {
-    await sb.from('devis').insert({
-      numero, client_id, date_emission: dateEmission,
-      grille: state.currentDevis.grille, lignes,
-      total_ht: sousHt, pieces, remise_pct: remisePct,
-      remise_montant: remiseMontant, tva, total_ttc: ttc,
-      statut: 'envoye',
-      vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
-    });
+    if (state.editingDevisId) {
+      // MODE ÉDITION
+      await sb.from('devis').update({
+        client_id, date_emission: dateEmission,
+        grille: state.currentDevis.grille, lignes,
+        total_ht: sousHt, pieces, remise_pct: remisePct,
+        remise_montant: remiseMontant, tva, total_ttc: ttc,
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      }).eq('id', state.editingDevisId);
+      state.editingDevisId = null;
+    } else {
+      await sb.from('devis').insert({
+        numero, client_id, date_emission: dateEmission,
+        grille: state.currentDevis.grille, lignes,
+        total_ht: sousHt, pieces, remise_pct: remisePct,
+        remise_montant: remiseMontant, tva, total_ttc: ttc,
+        statut: 'envoye',
+        vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+      });
+    }
   }
 
   const safeName = (client.nom || 'client').replace(/[^a-z0-9]/gi, '_');
@@ -1027,3 +1058,291 @@ function toast(msg, type = '') {
   t.className = 'toast show ' + type;
   setTimeout(() => t.className = 'toast', 3000);
 }
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ÉDITION & SUPPRESSION
+// ═══════════════════════════════════════════════════════════════════
+
+// ═══════════ SUPPRESSION CLIENT ═══════════
+document.getElementById('btn-delete-client').addEventListener('click', async () => {
+  if (!currentModalClient) return;
+  if (!confirm(`Supprimer définitivement le client "${currentModalClient.nom}" ?\n\n⚠️ Ses devis et factures resteront mais ne seront plus liés à un client.`)) return;
+
+  const { error } = await sb.from('clients').delete().eq('id', currentModalClient.id);
+  if (error) { toast('Erreur suppression', 'error'); return; }
+  toast('Client supprimé', 'success');
+  document.getElementById('modal-client').classList.remove('show');
+  loadClientsList();
+  loadKPIs();
+});
+
+// ═══════════ ÉDITION CLIENT ═══════════
+document.getElementById('btn-edit-client').addEventListener('click', () => {
+  if (!currentModalClient) return;
+  document.getElementById('edit-client-nom').value = currentModalClient.nom || '';
+  document.getElementById('edit-client-tel').value = currentModalClient.telephone || '';
+  document.getElementById('edit-client-adresse').value = currentModalClient.adresse || '';
+  document.getElementById('edit-client-commune').value = currentModalClient.commune || '';
+  document.getElementById('edit-client-email').value = currentModalClient.email || '';
+  document.getElementById('modal-edit-client').classList.add('show');
+});
+
+document.getElementById('btn-cancel-edit-client').addEventListener('click', () => {
+  document.getElementById('modal-edit-client').classList.remove('show');
+});
+document.getElementById('modal-edit-client-close').addEventListener('click', () => {
+  document.getElementById('modal-edit-client').classList.remove('show');
+});
+
+document.getElementById('btn-save-edit-client').addEventListener('click', async () => {
+  if (!currentModalClient) return;
+  const updated = {
+    nom: document.getElementById('edit-client-nom').value.trim(),
+    telephone: document.getElementById('edit-client-tel').value.trim(),
+    adresse: document.getElementById('edit-client-adresse').value.trim(),
+    commune: document.getElementById('edit-client-commune').value.trim(),
+    email: document.getElementById('edit-client-email').value.trim()
+  };
+  const { error } = await sb.from('clients').update(updated).eq('id', currentModalClient.id);
+  if (error) { toast('Erreur', 'error'); return; }
+  toast('Client mis à jour', 'success');
+  document.getElementById('modal-edit-client').classList.remove('show');
+  document.getElementById('modal-client').classList.remove('show');
+  loadClientsList();
+});
+
+// ═══════════ SUPPRESSION DEVIS ═══════════
+document.getElementById('btn-delete-devis').addEventListener('click', async () => {
+  if (!currentModalDevis) return;
+  if (!confirm(`Supprimer définitivement le devis ${currentModalDevis.numero} ?`)) return;
+
+  const { error } = await sb.from('devis').delete().eq('id', currentModalDevis.id);
+  if (error) { toast('Erreur suppression', 'error'); return; }
+  toast('Devis supprimé', 'success');
+  document.getElementById('modal-devis').classList.remove('show');
+  loadDevisList();
+  loadKPIs();
+});
+
+// ═══════════ ÉDITION DEVIS ═══════════
+document.getElementById('btn-edit-devis').addEventListener('click', async () => {
+  if (!currentModalDevis) return;
+  const devis = currentModalDevis;
+
+  document.getElementById('modal-devis').classList.remove('show');
+
+  // Reset form puis pré-remplir avec le devis existant
+  resetDevisForm();
+  showScreen('new-devis');
+
+  // Petit délai pour laisser le DOM se mettre à jour
+  await new Promise(r => setTimeout(r, 100));
+
+  // Mode édition
+  state.editingDevisId = devis.id;
+  state.editingDevisNumero = devis.numero;
+
+  // Pré-remplir client
+  if (devis.client_id) {
+    const { data: cl } = await sb.from('clients').select('*').eq('id', devis.client_id).maybeSingle();
+    if (cl) {
+      document.getElementById('d-client-nom').value = cl.nom || '';
+      document.getElementById('d-client-tel').value = cl.telephone || '';
+      document.getElementById('d-client-commune').value = cl.commune || '';
+      document.getElementById('d-client-adresse').value = cl.adresse || '';
+    }
+  }
+
+  // Véhicule
+  document.getElementById('d-vehicule').value = devis.vehicule_nom || '';
+  document.getElementById('d-immat').value = devis.vehicule_immat || '';
+  document.getElementById('d-km').value = devis.vehicule_km || '';
+
+  // Pieces / remise
+  state.currentDevis.pieces = parseFloat(devis.pieces) || 0;
+  state.currentDevis.remise_pct = parseFloat(devis.remise_pct) || 0;
+  state.currentDevis.grille = devis.grille;
+  document.getElementById('d-pieces').value = state.currentDevis.pieces;
+  document.getElementById('d-remise').value = state.currentDevis.remise_pct;
+
+  // Boutons remise
+  document.querySelectorAll('#screen-new-devis .rem-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.rem) === state.currentDevis.remise_pct);
+  });
+
+  // Grille
+  document.querySelectorAll('#screen-new-devis .grille-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.grille === devis.grille));
+
+  // Lignes
+  document.getElementById('prestations-list').innerHTML = '';
+  for (const lig of (devis.lignes || [])) {
+    addPrestationRow('d', lig);
+  }
+
+  // Changer le titre
+  document.getElementById('devis-title').textContent = `Modifier ${devis.numero}`;
+
+  updateTotals('d');
+  toast('Mode édition de ' + devis.numero, '');
+});
+
+// ═══════════ MODAL FACTURE ═══════════
+let currentModalFacture = null;
+
+async function openFactureModal(facture) {
+  currentModalFacture = facture;
+  document.getElementById('modal-facture-num').textContent = facture.numero;
+  document.getElementById('modal-facture-statut').value = facture.statut_paiement;
+
+  const clientNom = facture.clients?.nom || '—';
+  const lignesHtml = (facture.lignes || []).map(l => `
+    <div class="modal-prest-row">
+      <div>
+        <div class="ref">${l.ref}</div>
+        <div class="desig">${l.designation} × ${l.qte}</div>
+      </div>
+      <div class="price">${formatEUR(l.montant)}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-facture-body').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-label">Client</div>
+      <div class="modal-value">${clientNom}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Véhicule</div>
+      <div class="modal-value">${facture.vehicule_nom || '—'} ${facture.vehicule_immat ? '· ' + facture.vehicule_immat : ''} ${facture.vehicule_km ? '· ' + facture.vehicule_km + ' km' : ''}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Date · Échéance · Règlement</div>
+      <div class="modal-value">${new Date(facture.date_emission).toLocaleDateString('fr-FR')} · ${facture.date_echeance ? new Date(facture.date_echeance).toLocaleDateString('fr-FR') : '—'} · ${facture.mode_reglement || '—'}</div>
+    </div>
+    ${facture.observations ? `<div class="modal-section"><div class="modal-label">Observations</div><div class="modal-value">${facture.observations}</div></div>` : ''}
+    <div class="modal-section">
+      <div class="modal-label">Prestations</div>
+      ${lignesHtml}
+    </div>
+    <div class="modal-section">
+      <div class="modal-label">Totaux</div>
+      <div class="modal-value">HT ${formatEUR(facture.total_ht)} · TVA ${formatEUR(facture.tva)} · TTC <strong style="color:var(--accent)">${formatEUR(facture.total_ttc)}</strong></div>
+      ${facture.remise_pct > 0 ? `<div class="modal-value" style="color:var(--red)">Remise ${facture.remise_pct}% : -${formatEUR(facture.remise_montant)}</div>` : ''}
+    </div>
+  `;
+
+  document.getElementById('modal-facture').classList.add('show');
+}
+
+document.getElementById('modal-facture-close-btn').addEventListener('click', () => {
+  document.getElementById('modal-facture').classList.remove('show');
+});
+document.getElementById('modal-facture').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-facture') {
+    document.getElementById('modal-facture').classList.remove('show');
+  }
+});
+
+// Changer statut paiement
+document.getElementById('modal-facture-statut').addEventListener('change', async (e) => {
+  if (!currentModalFacture) return;
+  const newStatut = e.target.value;
+  const { error } = await sb.from('factures').update({ statut_paiement: newStatut }).eq('id', currentModalFacture.id);
+  if (error) { toast('Erreur', 'error'); return; }
+  currentModalFacture.statut_paiement = newStatut;
+  toast('Statut paiement mis à jour', 'success');
+  loadKPIs();
+});
+
+// Suppression facture
+document.getElementById('btn-delete-facture').addEventListener('click', async () => {
+  if (!currentModalFacture) return;
+  if (!confirm(`Supprimer définitivement la facture ${currentModalFacture.numero} ?`)) return;
+  const { error } = await sb.from('factures').delete().eq('id', currentModalFacture.id);
+  if (error) { toast('Erreur', 'error'); return; }
+  toast('Facture supprimée', 'success');
+  document.getElementById('modal-facture').classList.remove('show');
+  loadFacturesList();
+  loadKPIs();
+});
+
+// Édition facture
+document.getElementById('btn-edit-facture').addEventListener('click', async () => {
+  if (!currentModalFacture) return;
+  const facture = currentModalFacture;
+  document.getElementById('modal-facture').classList.remove('show');
+
+  resetFactureForm();
+  showScreen('new-facture');
+  await new Promise(r => setTimeout(r, 100));
+
+  state.editingFactureId = facture.id;
+  state.editingFactureNumero = facture.numero;
+
+  if (facture.client_id) {
+    const { data: cl } = await sb.from('clients').select('*').eq('id', facture.client_id).maybeSingle();
+    if (cl) {
+      document.getElementById('f-client-nom').value = cl.nom || '';
+      document.getElementById('f-client-tel').value = cl.telephone || '';
+      document.getElementById('f-client-commune').value = cl.commune || '';
+      document.getElementById('f-client-adresse').value = cl.adresse || '';
+    }
+  }
+
+  document.getElementById('f-vehicule').value = facture.vehicule_nom || '';
+  document.getElementById('f-immat').value = facture.vehicule_immat || '';
+  document.getElementById('f-km').value = facture.vehicule_km || '';
+  document.getElementById('f-date').value = facture.date_emission || '';
+  document.getElementById('f-echeance').value = facture.date_echeance || '';
+  document.getElementById('f-reglement').value = facture.mode_reglement || 'Espèces';
+  document.getElementById('f-observations').value = facture.observations || '';
+
+  state.currentFacture.pieces = parseFloat(facture.pieces) || 0;
+  state.currentFacture.remise_pct = parseFloat(facture.remise_pct) || 0;
+  state.currentFacture.grille = facture.grille || 'B';
+  document.getElementById('f-pieces').value = state.currentFacture.pieces;
+  document.getElementById('f-remise').value = state.currentFacture.remise_pct;
+
+  document.querySelectorAll('#screen-new-facture .rem-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.rem) === state.currentFacture.remise_pct);
+  });
+
+  document.getElementById('prestations-list-f').innerHTML = '';
+  for (const lig of (facture.lignes || [])) {
+    addPrestationRow('f', lig);
+  }
+
+  document.getElementById('facture-title').textContent = `Modifier ${facture.numero}`;
+  updateTotals('f');
+  toast('Mode édition de ' + facture.numero, '');
+});
+
+// ═══════════ Patch loadFacturesList pour rendre cliquable ═══════════
+const originalLoadFactures = loadFacturesList;
+loadFacturesList = async function() {
+  const c = document.getElementById('factures-list-container');
+  c.innerHTML = '<div class="empty-state">Chargement…</div>';
+  const { data } = await sb.from('factures').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
+  c.innerHTML = (data || []).map(f => {
+    const statusClass = f.statut_paiement === 'paye' ? 'status-paye' : f.statut_paiement === 'partiel' ? 'status-attente' : 'status-impaye';
+    const statusLabel = f.statut_paiement === 'paye' ? 'Payé' : f.statut_paiement === 'partiel' ? 'Partiel' : 'Impayé';
+    return `<div class="doc-item" data-facture-id="${f.id}">
+      <div>
+        <div class="doc-num">${f.numero}</div>
+        <div class="doc-client">${f.clients?.nom || '—'}</div>
+        <div class="doc-date">${new Date(f.date_emission).toLocaleDateString('fr-FR')}</div>
+        <span class="doc-status ${statusClass}">${statusLabel}</span>
+      </div>
+      <div class="doc-price">${formatEUR(f.total_ttc)}</div>
+    </div>`;
+  }).join('') || '<div class="empty-state"><div class="icon">🧾</div><div class="text">Aucune facture</div></div>';
+
+  c.querySelectorAll('.doc-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = parseInt(item.dataset.factureId);
+      const f = (data || []).find(x => x.id === id);
+      if (f) openFactureModal(f);
+    });
+  });
+};
