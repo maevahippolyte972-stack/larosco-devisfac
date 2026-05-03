@@ -676,9 +676,9 @@ function renderTarifs(filter = '') {
   const filtered = q
     ? state.prestations.filter(p => p.ref.toLowerCase().includes(q) || (p.designation || '').toLowerCase().includes(q))
     : state.prestations;
-  container.innerHTML = filtered.slice(0, 100).map(p => {
+  container.innerHTML = filtered.slice(0, 200).map(p => {
     const isBmw = p.ref.startsWith('BMW');
-    return `<div class="tarif-item">
+    return `<div class="tarif-item" data-tarif-id="${p.id}">
       <div class="tarif-info">
         <div class="tarif-ref ${isBmw ? 'bmw' : ''}">${p.ref}</div>
         <div class="tarif-desig">${p.designation}</div>
@@ -691,8 +691,153 @@ function renderTarifs(filter = '') {
       </div>
     </div>`;
   }).join('') || '<div class="empty-state"><div class="text">Aucun résultat</div></div>';
+
+  // Click sur un tarif = ouvrir édition
+  container.querySelectorAll('.tarif-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = parseInt(item.dataset.tarifId);
+      const t = state.prestations.find(x => x.id === id);
+      if (t) openTarifModal(t);
+    });
+  });
 }
 document.getElementById('tarifs-search').addEventListener('input', e => renderTarifs(e.target.value));
+
+// ═══════════ MODAL TARIF (création / édition) ═══════════
+let currentEditingTarif = null;
+
+function openTarifModal(tarif = null) {
+  currentEditingTarif = tarif;
+  const isEdit = tarif !== null;
+
+  document.getElementById('modal-tarif-title').textContent = isEdit ? 'Modifier tarif' : 'Nouveau tarif';
+  document.getElementById('tarif-edit-actions').style.display = isEdit ? 'flex' : 'none';
+
+  if (isEdit) {
+    document.getElementById('tarif-marque').value = tarif.marque || 'Toutes Marques';
+    document.getElementById('tarif-categorie').value = tarif.categorie || 'Entretien';
+    document.getElementById('tarif-ref').value = tarif.ref;
+    document.getElementById('tarif-ref').readOnly = true;
+    document.getElementById('tarif-desig').value = tarif.designation || '';
+    document.getElementById('tarif-prix-b').value = tarif.prix_b || '';
+    document.getElementById('tarif-prix-c').value = tarif.prix_c || '';
+    document.getElementById('tarif-prix-d').value = tarif.prix_d || '';
+  } else {
+    document.getElementById('tarif-marque').value = 'Toutes Marques';
+    document.getElementById('tarif-categorie').value = 'Entretien';
+    document.getElementById('tarif-ref').value = '';
+    document.getElementById('tarif-ref').readOnly = false;
+    document.getElementById('tarif-desig').value = '';
+    document.getElementById('tarif-prix-b').value = '';
+    document.getElementById('tarif-prix-c').value = '';
+    document.getElementById('tarif-prix-d').value = '';
+  }
+
+  document.getElementById('modal-tarif').classList.add('show');
+}
+
+document.getElementById('btn-add-tarif').addEventListener('click', () => openTarifModal(null));
+document.getElementById('modal-tarif-close').addEventListener('click', () => {
+  document.getElementById('modal-tarif').classList.remove('show');
+});
+document.getElementById('btn-cancel-tarif').addEventListener('click', () => {
+  document.getElementById('modal-tarif').classList.remove('show');
+});
+document.getElementById('modal-tarif').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-tarif') document.getElementById('modal-tarif').classList.remove('show');
+});
+
+// Auto-générer la référence quand catégorie change (si pas en édition)
+function getCategoryPrefix(cat) {
+  const map = {
+    'Déplacement': 'DEP', 'Diagnostic': 'DIAG', 'Entretien': 'ENT',
+    'Mécanique / Moteur': 'MEC', 'Transmission / Embrayage': 'TRA',
+    'Freinage': 'FRN', 'Suspension': 'SUS', 'Climatisation': 'CLI',
+    'Électrique': 'ELC', 'Vitrage / Carrosserie élec.': 'VIT',
+    'Carrosserie / Optiques': 'CAR', 'Nettoyage auto': 'NET',
+    'Entretien avancé': 'ENTA', 'Freinage avancé': 'FRNA',
+    'Suspension avancée': 'SUSA', 'BMW Spécifique': 'SPE'
+  };
+  return map[cat] || 'AUT';
+}
+
+function generateNextRef(marque, categorie) {
+  const marquePrefix = marque === 'BMW' ? 'BMW' : 'TM';
+  const catPrefix = getCategoryPrefix(categorie);
+  const pattern = `${marquePrefix}-${catPrefix}-`;
+  let max = 0;
+  state.prestations.forEach(p => {
+    if (p.ref.startsWith(pattern)) {
+      const num = parseInt(p.ref.split('-').pop()) || 0;
+      if (num > max) max = num;
+    }
+  });
+  return `${pattern}${String(max + 1).padStart(2, '0')}`;
+}
+
+// Sauvegarder tarif
+document.getElementById('btn-save-tarif').addEventListener('click', async () => {
+  const marque = document.getElementById('tarif-marque').value;
+  const categorie = document.getElementById('tarif-categorie').value;
+  let ref = document.getElementById('tarif-ref').value.trim().toUpperCase();
+  const designation = document.getElementById('tarif-desig').value.trim();
+  let prix_b = parseFloat(document.getElementById('tarif-prix-b').value) || null;
+  let prix_c = parseFloat(document.getElementById('tarif-prix-c').value) || null;
+  let prix_d = parseFloat(document.getElementById('tarif-prix-d').value) || null;
+
+  if (!designation) { toast('Désignation obligatoire', 'error'); return; }
+
+  // Auto-calculer prix_c si vide
+  if (!prix_c && prix_b) {
+    prix_c = Math.round(prix_b * 1.25 / 10) * 10;
+  }
+
+  // Validation
+  if (marque === 'BMW' && !prix_d) { toast('Prix D obligatoire pour BMW', 'error'); return; }
+  if (marque !== 'BMW' && !prix_b) { toast('Prix B obligatoire', 'error'); return; }
+
+  // Génération auto de la ref si vide (mode création)
+  if (!currentEditingTarif && !ref) {
+    ref = generateNextRef(marque, categorie);
+  }
+
+  if (!ref) { toast('Référence obligatoire', 'error'); return; }
+
+  // Vérifier doublon (sauf édition même ref)
+  if (!currentEditingTarif || currentEditingTarif.ref !== ref) {
+    if (state.prestations.find(p => p.ref === ref)) {
+      toast('Cette référence existe déjà', 'error'); return;
+    }
+  }
+
+  const data = { ref, marque, categorie, designation, prix_b, prix_c, prix_d };
+
+  if (currentEditingTarif) {
+    const { error } = await sb.from('prestations').update(data).eq('id', currentEditingTarif.id);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    toast('Tarif mis à jour ✓', 'success');
+  } else {
+    const { error } = await sb.from('prestations').insert(data);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    toast('Nouveau tarif ajouté ✓', 'success');
+  }
+
+  document.getElementById('modal-tarif').classList.remove('show');
+  await loadPrestations();
+  renderTarifs(document.getElementById('tarifs-search').value);
+});
+
+// Supprimer tarif
+document.getElementById('btn-delete-tarif').addEventListener('click', async () => {
+  if (!currentEditingTarif) return;
+  if (!confirm(`Supprimer définitivement le tarif "${currentEditingTarif.ref} — ${currentEditingTarif.designation}" ?`)) return;
+  const { error } = await sb.from('prestations').delete().eq('id', currentEditingTarif.id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  toast('Tarif supprimé ✓', 'success');
+  document.getElementById('modal-tarif').classList.remove('show');
+  await loadPrestations();
+  renderTarifs(document.getElementById('tarifs-search').value);
+});
 
 // ═══════════ LISTES ═══════════
 async function loadDevisList() {
