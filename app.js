@@ -833,7 +833,7 @@ document.getElementById('btn-save-tarif').addEventListener('click', async () => 
 // Supprimer tarif
 document.getElementById('btn-delete-tarif').addEventListener('click', async () => {
   if (!currentEditingTarif) return;
-  if (!confirm(`Supprimer définitivement le tarif "${currentEditingTarif.ref} — ${currentEditingTarif.designation}" ?`)) return;
+  if (!(await confirmDialog('Supprimer le tarif', `${currentEditingTarif.ref} — ${currentEditingTarif.designation}`))) return;
   const { error } = await sb.from('prestations').delete().eq('id', currentEditingTarif.id);
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   toast('Tarif supprimé ✓', 'success');
@@ -1204,6 +1204,82 @@ document.getElementById('btn-convert-facture').addEventListener('click', () => {
   setTimeout(() => prefillFactureFromDevis(devis), 100);
 });
 
+
+
+// ═══════════ CONFIRMATION COMPATIBLE iOS ═══════════
+function confirmDialog(title, msg) {
+  return new Promise(resolve => {
+    document.getElementById('modal-confirm-title').textContent = title;
+    document.getElementById('modal-confirm-msg').textContent = msg;
+    document.getElementById('modal-confirm').classList.add('show');
+
+    const ok = document.getElementById('confirm-ok');
+    const cancel = document.getElementById('confirm-cancel');
+
+    const cleanup = () => {
+      document.getElementById('modal-confirm').classList.remove('show');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+    };
+    const onOk = () => { cleanup(); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+  });
+}
+
+// ═══════════ AJOUT CLIENT (depuis écran Clients) ═══════════
+document.getElementById('btn-add-client').addEventListener('click', () => {
+  document.getElementById('new-client-nom').value = '';
+  document.getElementById('new-client-tel').value = '';
+  document.getElementById('new-client-adresse').value = '';
+  document.getElementById('new-client-commune').value = '';
+  document.getElementById('new-client-email').value = '';
+  document.getElementById('modal-new-client').classList.add('show');
+});
+
+document.getElementById('btn-cancel-new-client').addEventListener('click', () => {
+  document.getElementById('modal-new-client').classList.remove('show');
+});
+document.getElementById('modal-new-client-close').addEventListener('click', () => {
+  document.getElementById('modal-new-client').classList.remove('show');
+});
+document.getElementById('modal-new-client').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-new-client') document.getElementById('modal-new-client').classList.remove('show');
+});
+
+document.getElementById('btn-save-new-client').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-save-new-client');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  const nom = document.getElementById('new-client-nom').value.trim();
+  if (!nom) {
+    toast('Le nom est obligatoire', 'error');
+    btn.disabled = false; btn.textContent = 'Enregistrer';
+    return;
+  }
+
+  const data = {
+    nom,
+    telephone: document.getElementById('new-client-tel').value.trim(),
+    adresse: document.getElementById('new-client-adresse').value.trim(),
+    commune: document.getElementById('new-client-commune').value.trim(),
+    email: document.getElementById('new-client-email').value.trim()
+  };
+
+  const { error } = await sb.from('clients').insert(data);
+  btn.disabled = false; btn.textContent = 'Enregistrer';
+
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  toast('Client ' + nom + ' ajouté ✓', 'success');
+  document.getElementById('modal-new-client').classList.remove('show');
+  loadClientsList();
+  loadKPIs();
+});
+
 // ═══════════ HELPERS ═══════════
 function formatEUR(v) {
   if (!v && v !== 0) return '—';
@@ -1224,7 +1300,7 @@ function toast(msg, type = '') {
 // ═══════════ SUPPRESSION CLIENT ═══════════
 document.getElementById('btn-delete-client').addEventListener('click', async () => {
   if (!currentModalClient) return;
-  if (!confirm(`Supprimer définitivement le client "${currentModalClient.nom}" ?\n\n⚠️ Ses devis et factures resteront mais ne seront plus liés à un client.`)) return;
+  if (!(await confirmDialog('Supprimer le client', `${currentModalClient.nom} ? Ses devis et factures resteront.`))) return;
 
   const { error } = await sb.from('clients').delete().eq('id', currentModalClient.id);
   if (error) { toast('Erreur suppression', 'error'); return; }
@@ -1272,7 +1348,7 @@ document.getElementById('btn-save-edit-client').addEventListener('click', async 
 // ═══════════ SUPPRESSION DEVIS ═══════════
 document.getElementById('btn-delete-devis').addEventListener('click', async () => {
   if (!currentModalDevis) return;
-  if (!confirm(`Supprimer définitivement le devis ${currentModalDevis.numero} ?`)) return;
+  if (!(await confirmDialog('Supprimer le devis', `${currentModalDevis.numero} ?`))) return;
 
   const { error } = await sb.from('devis').delete().eq('id', currentModalDevis.id);
   if (error) { toast('Erreur suppression', 'error'); return; }
@@ -1415,7 +1491,7 @@ document.getElementById('modal-facture-statut').addEventListener('change', async
 // Suppression facture
 document.getElementById('btn-delete-facture').addEventListener('click', async () => {
   if (!currentModalFacture) return;
-  if (!confirm(`Supprimer définitivement la facture ${currentModalFacture.numero} ?`)) return;
+  if (!(await confirmDialog('Supprimer la facture', `${currentModalFacture.numero} ?`))) return;
   const { error } = await sb.from('factures').delete().eq('id', currentModalFacture.id);
   if (error) { toast('Erreur', 'error'); return; }
   toast('Facture supprimée', 'success');
