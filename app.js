@@ -1483,16 +1483,23 @@ document.getElementById('btn-edit-facture').addEventListener('click', async () =
 // ═══════════════════════════════════════════════════════════════════
 
 async function saveAsDraft() {
-  // Récupérer prochain numéro si nouveau, sinon garder l'existant
-  let numero = state.editingDevisId
-    ? (state.editingDevisNumero || null)
-    : null;
+  const btn = document.getElementById('btn-save-draft');
+  if (btn.disabled) return; // Empêcher double-clic
+  btn.disabled = true;
+  const oldTxt = btn.textContent;
+  btn.textContent = 'Enregistrement...';
 
-  if (!numero) {
-    const { data: numData, error: numErr } = await sb.rpc('prochain_numero', { type_doc: 'devis' });
-    if (numErr) { toast('Erreur numéro', 'error'); return; }
-    numero = numData;
-  }
+  try {
+    // Récupérer prochain numéro si nouveau, sinon garder l'existant
+    let numero = state.editingDevisId
+      ? (state.editingDevisNumero || null)
+      : null;
+
+    if (!numero) {
+      const { data: numData, error: numErr } = await sb.rpc('prochain_numero', { type_doc: 'devis' });
+      if (numErr) { toast('Erreur numéro', 'error'); btn.disabled = false; btn.textContent = oldTxt; return; }
+      numero = numData;
+    }
 
   // Lignes
   const lignes = [];
@@ -1572,11 +1579,23 @@ async function saveAsDraft() {
       statut: 'brouillon',
       vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
     });
-    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    if (error) { 
+      toast('Erreur : ' + error.message, 'error');
+      btn.disabled = false; btn.textContent = oldTxt;
+      return;
+    }
     toast('Brouillon ' + numero + ' enregistré ✓', 'success');
   }
 
-  setTimeout(() => { showScreen('home'); loadKPIs(); }, 1200);
+    btn.disabled = false;
+    btn.textContent = oldTxt;
+    setTimeout(() => { showScreen('home'); loadKPIs(); }, 1200);
+  } catch (e) {
+    console.error('Erreur saveAsDraft:', e);
+    toast('Erreur : ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = oldTxt;
+  }
 }
 
 // Brancher le bouton "Enregistrer brouillon" qui existait déjà dans HTML
