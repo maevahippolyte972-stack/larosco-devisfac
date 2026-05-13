@@ -235,7 +235,10 @@
 <section id="screen-clients" class="screen">
   <header class="topbar">
     <button class="icon-btn" data-back="home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
-    <div class="topbar-title">Clients</div><div style="width:32px"></div>
+    <div class="topbar-title">Clients</div>
+    <button class="icon-btn" id="btn-add-client" aria-label="Nouveau client" style="background:var(--accent);border-radius:8px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
   </header>
   <main class="page">
     <input type="search" id="clients-search" class="search-input" placeholder="Rechercher un client...">
@@ -534,6 +537,42 @@
         <button class="btn-secondary" id="btn-cancel-tarif">Annuler</button>
         <button class="btn-primary" id="btn-save-tarif">Enregistrer</button>
       </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ MODAL CONFIRMATION (iOS-friendly) ═══════════════ -->
+<div id="modal-confirm" class="modal">
+  <div class="modal-content" style="max-width:380px;border-radius:18px">
+    <div class="modal-head" style="border-bottom:none">
+      <h3 id="modal-confirm-title" style="color:var(--text)">Confirmer</h3>
+    </div>
+    <div class="modal-body" id="modal-confirm-msg" style="padding-top:0">Action ?</div>
+    <div class="modal-footer-actions" style="padding:14px 20px calc(14px + var(--safe-bottom))">
+      <button class="btn-secondary" id="confirm-cancel">Annuler</button>
+      <button class="btn-icon-danger" id="confirm-ok" style="flex:1;font-size:14px;font-weight:700">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL NOUVEAU CLIENT ═══════════════ -->
+<div id="modal-new-client" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3>Nouveau client</h3>
+      <button class="modal-close" id="modal-new-client-close">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field"><span>Nom *</span><input type="text" id="new-client-nom" autocomplete="name"></label>
+      <label class="field"><span>Téléphone</span><input type="tel" id="new-client-tel" autocomplete="tel"></label>
+      <label class="field"><span>Adresse</span><input type="text" id="new-client-adresse"></label>
+      <label class="field"><span>Commune</span><input type="text" id="new-client-commune"></label>
+      <label class="field"><span>Email</span><input type="email" id="new-client-email" autocomplete="email"></label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btn-cancel-new-client">Annuler</button>
+      <button class="btn-primary" id="btn-save-new-client">Enregistrer</button>
     </div>
   </div>
 </div>
