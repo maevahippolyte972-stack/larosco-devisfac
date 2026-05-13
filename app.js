@@ -613,7 +613,7 @@ async function generatePDF(type) {
 
   if (isFacture) {
     if (state.editingFactureId) {
-      await sb.from('factures').update({
+      const { error: errU } = await sb.from('factures').update({
         client_id, date_emission: dateEmission,
         date_echeance: dateEcheance || null,
         mode_reglement: modeReglement, observations,
@@ -622,9 +622,10 @@ async function generatePDF(type) {
         tva, total_ttc: ttc,
         vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
       }).eq('id', state.editingFactureId);
+      if (errU) { console.error('Erreur update facture:', errU); toast('Erreur : ' + errU.message, 'error'); }
       state.editingFactureId = null;
     } else {
-      await sb.from('factures').insert({
+      const { error: errI } = await sb.from('factures').insert({
         numero, devis_id: state.currentFacture.source_devis_id, client_id,
         date_emission: dateEmission, date_echeance: dateEcheance || null,
         mode_reglement: modeReglement, observations,
@@ -633,6 +634,7 @@ async function generatePDF(type) {
         tva, total_ttc: ttc, statut_paiement: 'impaye',
         vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
       });
+      if (errI) { console.error('Erreur insert facture:', errI); toast('Erreur : ' + errI.message, 'error'); }
     }
     // Si vient d'un devis, marquer celui-ci comme accepté
     if (state.currentFacture.source_devis_id) {
@@ -640,17 +642,17 @@ async function generatePDF(type) {
     }
   } else {
     if (state.editingDevisId) {
-      // MODE ÉDITION
-      await sb.from('devis').update({
+      const { error: errUpd } = await sb.from('devis').update({
         client_id, date_emission: dateEmission,
         grille: state.currentDevis.grille, lignes,
         total_ht: sousHt, pieces, remise_pct: remisePct,
         remise_montant: remiseMontant, tva, total_ttc: ttc,
         vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
       }).eq('id', state.editingDevisId);
+      if (errUpd) { console.error('Erreur update devis:', errUpd); toast('Erreur sauvegarde devis : ' + errUpd.message, 'error'); }
       state.editingDevisId = null;
     } else {
-      await sb.from('devis').insert({
+      const { error: errIns } = await sb.from('devis').insert({
         numero, client_id, date_emission: dateEmission,
         grille: state.currentDevis.grille, lignes,
         total_ht: sousHt, pieces, remise_pct: remisePct,
@@ -658,6 +660,7 @@ async function generatePDF(type) {
         statut: 'envoye',
         vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
       });
+      if (errIns) { console.error('Erreur insert devis:', errIns); toast('Erreur enregistrement devis : ' + errIns.message, 'error'); }
     }
   }
 
@@ -1471,3 +1474,111 @@ document.getElementById('btn-edit-facture').addEventListener('click', async () =
   updateTotals('f');
   toast('Mode édition de ' + facture.numero, '');
 });
+
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+// BROUILLONS — Sauvegarde sans générer le PDF
+// ═══════════════════════════════════════════════════════════════════
+
+async function saveAsDraft() {
+  // Récupérer prochain numéro si nouveau, sinon garder l'existant
+  let numero = state.editingDevisId
+    ? (state.editingDevisNumero || null)
+    : null;
+
+  if (!numero) {
+    const { data: numData, error: numErr } = await sb.rpc('prochain_numero', { type_doc: 'devis' });
+    if (numErr) { toast('Erreur numéro', 'error'); return; }
+    numero = numData;
+  }
+
+  // Lignes
+  const lignes = [];
+  document.querySelectorAll('#prestations-list .prestation-row').forEach(row => {
+    if (!row.dataset.ref) return;
+    lignes.push({
+      ref: row.dataset.ref,
+      designation: row.dataset.designation,
+      qte: parseFloat(row.querySelector('.prest-qty').value) || 0,
+      pu: parseFloat(row.dataset.pu) || 0,
+      montant: parseFloat(row.dataset.total) || 0
+    });
+  });
+
+  // Données
+  const client = {
+    nom: document.getElementById('d-client-nom').value || '',
+    tel: document.getElementById('d-client-tel').value || '',
+    commune: document.getElementById('d-client-commune').value || '',
+    adresse: document.getElementById('d-client-adresse').value || ''
+  };
+  const vehicule = {
+    nom: document.getElementById('d-vehicule').value || '',
+    immat: document.getElementById('d-immat').value || '',
+    km: document.getElementById('d-km').value || ''
+  };
+
+  // Au moins un nom client OU une ligne pour pouvoir enregistrer
+  if (!client.nom && lignes.length === 0) {
+    toast('Renseigne au moins le nom du client ou une prestation', 'error');
+    return;
+  }
+
+  const totalMo = lignes.reduce((s, l) => s + l.montant, 0);
+  const pieces = state.currentDevis.pieces;
+  const sousHt = totalMo + pieces;
+  const tva = sousHt * 0.085;
+  const ttcAvant = sousHt + tva;
+  const remisePct = state.currentDevis.remise_pct;
+  const remiseMontant = remisePct > 0 ? ttcAvant * remisePct / 100 : 0;
+  const ttc = ttcAvant - remiseMontant;
+
+  // Gérer client : trouver ou créer
+  let client_id = null;
+  if (client.nom) {
+    const { data: existing } = await sb.from('clients').select('id').ilike('nom', client.nom).maybeSingle();
+    if (existing) {
+      client_id = existing.id;
+      await sb.from('clients').update({
+        telephone: client.tel, adresse: client.adresse, commune: client.commune
+      }).eq('id', client_id);
+    } else {
+      const { data: newCl } = await sb.from('clients').insert({
+        nom: client.nom, telephone: client.tel, adresse: client.adresse, commune: client.commune
+      }).select().single();
+      if (newCl) client_id = newCl.id;
+    }
+  }
+
+  // Sauvegarde
+  if (state.editingDevisId) {
+    const { error } = await sb.from('devis').update({
+      client_id, grille: state.currentDevis.grille, lignes,
+      total_ht: sousHt, pieces, remise_pct: remisePct,
+      remise_montant: remiseMontant, tva, total_ttc: ttc,
+      statut: 'brouillon',
+      vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+    }).eq('id', state.editingDevisId);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    toast('Brouillon mis à jour ✓', 'success');
+  } else {
+    const { error } = await sb.from('devis').insert({
+      numero, client_id, date_emission: new Date().toISOString().split('T')[0],
+      grille: state.currentDevis.grille, lignes,
+      total_ht: sousHt, pieces, remise_pct: remisePct,
+      remise_montant: remiseMontant, tva, total_ttc: ttc,
+      statut: 'brouillon',
+      vehicule_nom: vehicule.nom, vehicule_immat: vehicule.immat, vehicule_km: vehicule.km
+    });
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    toast('Brouillon ' + numero + ' enregistré ✓', 'success');
+  }
+
+  setTimeout(() => { showScreen('home'); loadKPIs(); }, 1200);
+}
+
+// Brancher le bouton "Enregistrer brouillon" qui existait déjà dans HTML
+const btnSaveDraft = document.getElementById('btn-save-draft');
+if (btnSaveDraft) btnSaveDraft.addEventListener('click', saveAsDraft);
