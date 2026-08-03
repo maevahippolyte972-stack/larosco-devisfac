@@ -855,7 +855,7 @@ document.getElementById('btn-delete-tarif').addEventListener('click', async () =
 async function loadDevisList() {
   const c = document.getElementById('devis-list-container');
   c.innerHTML = '<div class="empty-state">Chargement…</div>';
-  const { data } = await sb.from('devis').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
+  const { data } = await sb.from('devis').select('*, clients(nom, telephone)').order('created_at', { ascending: false }).limit(50);
   c.innerHTML = (data || []).map(d => {
     const statusClass = 'status-' + d.statut;
     const statusLabel = {brouillon:'Brouillon', envoye:'Envoyé', accepte:'Accepté', refuse:'Refusé', expire:'Expiré'}[d.statut] || d.statut;
@@ -883,7 +883,7 @@ async function loadDevisList() {
 async function loadFacturesList() {
   const c = document.getElementById('factures-list-container');
   c.innerHTML = '<div class="empty-state">Chargement…</div>';
-  const { data } = await sb.from('factures').select('*, clients(nom)').order('created_at', { ascending: false }).limit(50);
+  const { data } = await sb.from('factures').select('*, clients(nom, telephone)').order('created_at', { ascending: false }).limit(50);
   c.innerHTML = (data || []).map(f => {
     const statusClass = f.statut_paiement === 'paye' ? 'status-paye' : f.statut_paiement === 'partiel' ? 'status-attente' : 'status-impaye';
     const statusLabel = f.statut_paiement === 'paye' ? 'Payé' : f.statut_paiement === 'partiel' ? 'Partiel' : 'Impayé';
@@ -1985,49 +1985,49 @@ function updateTodoBadge(count) {
 
 // ═══════════ WHATSAPP BUSINESS RELANCE ═══════════
 async function openWhatsApp(tel, message) {
-  // Nettoyer téléphone
-  let clean = (tel || '').replace(/[\s.\-()]/g, '');
-  if (clean.startsWith('0')) clean = '596' + clean.substring(1);
-  if (clean.startsWith('+')) clean = clean.substring(1);
-
-  // 1. Copier le message dans le presse-papier (au cas où)
+  // ÉTAPE 1 : Copier le message dans le presse-papier (toujours)
+  let copied = false;
   try {
     await navigator.clipboard.writeText(message);
-    toast('📋 Message copié — colle-le si besoin', 'success');
+    copied = true;
   } catch (e) {
-    console.log('Clipboard non dispo');
+    // Fallback : élément textarea temporaire
+    const ta = document.createElement('textarea');
+    ta.value = message;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); copied = true; } catch(e2) {}
+    document.body.removeChild(ta);
   }
 
-  // 2. Tenter WhatsApp Business en premier (URL scheme spécifique)
-  const businessUrl = `whatsapp-business://send?phone=${clean}&text=${encodeURIComponent(message)}`;
-  const fallbackUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  // ÉTAPE 2 : Toast + confirmation à l'utilisateur
+  if (copied) {
+    toast('✅ Message copié — Choisis ton contact WhatsApp', 'success');
+  } else {
+    toast('⚠️ Copie impossible — le message va s\'ouvrir', 'error');
+  }
 
-  // Créer un iframe caché pour tester le scheme (méthode iOS)
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = businessUrl;
-  document.body.appendChild(iframe);
-
-  // Après 800ms, si toujours sur la page → fallback vers WhatsApp classique
-  let opened = false;
-  const cleanup = () => {
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  };
-
-  // Détection : si l'utilisateur quitte la page (WhatsApp Business ouvert), on annule le fallback
-  const visHandler = () => {
-    if (document.hidden) { opened = true; cleanup(); }
-  };
-  document.addEventListener('visibilitychange', visHandler);
-
+  // ÉTAPE 3 : Attendre un peu que le toast soit visible puis ouvrir WhatsApp Business
   setTimeout(() => {
-    document.removeEventListener('visibilitychange', visHandler);
-    cleanup();
-    if (!opened) {
-      // WhatsApp Business non installé ou refus → ouvrir wa.me/ classique
-      window.open(fallbackUrl, '_blank');
-    }
-  }, 800);
+    // On ouvre directement l'app WhatsApp Business (sans numéro)
+    // L'utilisateur choisit son contact et fait "coller"
+    window.location.href = 'whatsapp-business://';
+
+    // Fallback : après 1,5s, si toujours sur la page, essayer WhatsApp classique
+    setTimeout(() => {
+      if (!document.hidden) {
+        window.location.href = 'whatsapp://';
+        // Ultime fallback : Safari ouvre WhatsApp Web
+        setTimeout(() => {
+          if (!document.hidden) {
+            window.open('https://web.whatsapp.com/', '_blank');
+          }
+        }, 1000);
+      }
+    }, 1500);
+  }, 600);
 }
 
 function callWhatsApp(tel, type, numDevis, vehicule, montant) {
