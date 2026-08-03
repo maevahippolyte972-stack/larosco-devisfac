@@ -69,6 +69,10 @@
         <span class="action-icon">💰</span>
         <span class="action-label">Tarifs</span>
       </button>
+      <button class="action-btn" data-screen="compta">
+        <span class="action-icon">📈</span>
+        <span class="action-label">Comptabilité</span>
+      </button>
     </div>
   </main>
 </section>
@@ -372,6 +376,119 @@
     </div>
   </main>
 </section>
+
+
+<!-- ═══════════════ ÉCRAN COMPTABILITÉ ═══════════════ -->
+<section id="screen-compta" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <div class="topbar-title">Comptabilité</div>
+    <button class="icon-btn" id="btn-add-fact-historique" aria-label="Facture historique" style="background:var(--accent);border-radius:8px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </header>
+  <main class="page">
+
+    <!-- Sélecteur année + total -->
+    <div class="card">
+      <div class="card-body">
+        <div class="row-2" style="align-items:center">
+          <label class="field">
+            <span>Année</span>
+            <select id="compta-annee" class="select-input"></select>
+          </label>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:0.5px">CA Annuel</div>
+            <div id="compta-ca-annuel" style="font-size:22px;font-weight:800;color:var(--accent)">— €</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Synthèse globale -->
+    <div class="card">
+      <div class="card-head">SYNTHÈSE ANNUELLE</div>
+      <div class="card-body">
+        <div class="total-row">
+          <span>CA HT encaissé</span>
+          <span id="compta-ca-ht" style="color:var(--accent);font-weight:700">— €</span>
+        </div>
+        <div class="total-row">
+          <span>TVA collectée (8,5%)</span>
+          <span id="compta-tva" style="color:var(--yellow)">— €</span>
+        </div>
+        <div class="total-row">
+          <span>URSSAF (3,9%)</span>
+          <span id="compta-urssaf" style="color:var(--yellow)">— €</span>
+        </div>
+        <div class="total-row" style="background:rgba(192,57,43,0.1);margin:6px -16px;padding:10px 16px;border-radius:8px">
+          <span style="font-weight:700">À reverser à l'État</span>
+          <span id="compta-etat" style="font-weight:800;color:var(--red);font-size:16px">— €</span>
+        </div>
+        <div class="total-row total-final" style="background:var(--green);margin:6px -16px -16px">
+          <span style="color:white">Bénéfice net estimé</span>
+          <span id="compta-benefice" style="color:white;font-size:20px">— €</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Détail par mois -->
+    <div class="card">
+      <div class="card-head">DÉTAIL PAR MOIS</div>
+      <div class="card-body" id="compta-mois-list" style="padding:8px"></div>
+    </div>
+
+    <!-- Note -->
+    <div style="font-size:11px;color:var(--text-3);text-align:center;margin-top:20px;line-height:1.5">
+      💡 Larosco — Micro-entrepreneur Martinique<br>
+      BIC Prestations de services artisanat · DOM période 1<br>
+      URSSAF : 3,60% cotisations + 0,30% formation = 3,90%<br>
+      TVA Art. 296 CGI DOM : 8,5%
+    </div>
+  </main>
+</section>
+
+<!-- ═══════════════ MODAL FACTURE HISTORIQUE ═══════════════ -->
+<div id="modal-fact-historique" class="modal">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h3 id="modal-fact-hist-title">Facture historique</h3>
+      <button class="modal-close" id="modal-fact-hist-close">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">
+        Ajoute une facture émise avant l'utilisation de l'app, pour avoir un suivi annuel complet.
+      </p>
+      <label class="field">
+        <span>Date d'émission *</span>
+        <input type="date" id="fact-hist-date">
+      </label>
+      <label class="field">
+        <span>Nom du client *</span>
+        <input type="text" id="fact-hist-client">
+      </label>
+      <label class="field">
+        <span>Montant HT (€) *</span>
+        <input type="number" id="fact-hist-ht" step="0.01" min="0">
+      </label>
+      <label class="field">
+        <span>Notes (optionnel)</span>
+        <input type="text" id="fact-hist-notes" placeholder="Ex: véhicule, intervention...">
+      </label>
+    </div>
+    <div class="modal-footer-wrap">
+      <div class="modal-footer-actions" id="fact-hist-edit-actions" style="display:none">
+        <button class="btn-icon-danger" id="btn-delete-fact-hist">🗑️</button>
+      </div>
+      <div class="modal-footer-actions">
+        <button class="btn-secondary" id="btn-cancel-fact-hist">Annuler</button>
+        <button class="btn-primary" id="btn-save-fact-hist">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════ MODAL DÉTAIL DEVIS ═══════════════ -->
 <div id="modal-devis" class="modal">
