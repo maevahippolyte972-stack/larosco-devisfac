@@ -73,6 +73,10 @@
         <span class="action-icon">📈</span>
         <span class="action-label">Comptabilité</span>
       </button>
+      <button class="action-btn" data-screen="todo">
+        <span class="action-icon">📌</span>
+        <span class="action-label">À faire<span id="badge-todo" class="action-badge"></span></span>
+      </button>
     </div>
   </main>
 </section>
@@ -378,6 +382,39 @@
 </section>
 
 
+
+<!-- ═══════════════ ÉCRAN À FAIRE ═══════════════ -->
+<section id="screen-todo" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" data-back="home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <div class="topbar-title">📌 À faire</div>
+    <div style="width:32px"></div>
+  </header>
+  <main class="page">
+
+    <!-- Devis acceptés en attente de RDV -->
+    <div class="card">
+      <div class="card-head">🟢 DEVIS ACCEPTÉS — À planifier</div>
+      <div class="card-body" id="todo-devis-acceptes" style="padding:8px"></div>
+    </div>
+
+    <!-- Devis envoyés en attente de réponse -->
+    <div class="card">
+      <div class="card-head">📤 DEVIS ENVOYÉS — Relancer</div>
+      <div class="card-body" id="todo-devis-envoyes" style="padding:8px"></div>
+    </div>
+
+    <!-- Factures impayées -->
+    <div class="card">
+      <div class="card-head">💰 FACTURES IMPAYÉES</div>
+      <div class="card-body" id="todo-factures-impayees" style="padding:8px"></div>
+    </div>
+
+  </main>
+</section>
+
 <!-- ═══════════════ ÉCRAN COMPTABILITÉ ═══════════════ -->
 <section id="screen-compta" class="screen">
   <header class="topbar">
@@ -506,10 +543,12 @@
         <option value="refuse">Refusé</option>
         <option value="expire">Expiré</option>
       </select>
-      <div class="modal-footer-actions">
+      <div class="modal-footer-actions" style="flex-wrap:wrap">
         <button class="btn-icon-danger" id="btn-delete-devis" title="Supprimer">🗑️</button>
-        <button class="btn-secondary" id="btn-edit-devis">✏️ Modifier</button>
-        <button class="btn-primary" id="btn-convert-facture">→ Convertir en facture</button>
+        <button class="btn-secondary" id="btn-edit-devis" style="flex:0 1 auto;padding:10px 12px;font-size:12px">✏️ Modifier</button>
+        <button class="btn-secondary" id="btn-calendar-devis" style="flex:0 1 auto;padding:10px 12px;font-size:12px">📅 RDV</button>
+        <button class="btn-secondary" id="btn-whatsapp-devis" style="flex:0 1 auto;padding:10px 12px;font-size:12px">💬 WhatsApp</button>
+        <button class="btn-primary" id="btn-convert-facture" style="flex:1 0 100%;margin-top:4px">→ Convertir en facture</button>
       </div>
     </div>
   </div>
