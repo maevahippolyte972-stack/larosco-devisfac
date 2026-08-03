@@ -1292,7 +1292,10 @@ document.getElementById('btn-save-new-client').addEventListener('click', async (
 // ═══════════ HELPERS ═══════════
 function formatEUR(v) {
   if (!v && v !== 0) return '—';
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  const num = parseFloat(v) || 0;
+  const [entier, dec] = num.toFixed(2).split('.');
+  const entierFmt = entier.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return entierFmt + ',' + dec + ' €';
 }
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
@@ -1980,27 +1983,63 @@ function updateTodoBadge(count) {
   }
 }
 
-// ═══════════ WHATSAPP RELANCE ═══════════
-function callWhatsApp(tel, type, numDevis, vehicule, montant) {
-  // Nettoyer téléphone (retirer espaces, points, tirets)
-  let clean = tel.replace(/[\s.\-]/g, '');
-  // Ajouter 596 si commence par 0 (Martinique)
+// ═══════════ WHATSAPP BUSINESS RELANCE ═══════════
+async function openWhatsApp(tel, message) {
+  // Nettoyer téléphone
+  let clean = (tel || '').replace(/[\s.\-()]/g, '');
   if (clean.startsWith('0')) clean = '596' + clean.substring(1);
+  if (clean.startsWith('+')) clean = clean.substring(1);
 
+  // 1. Copier le message dans le presse-papier (au cas où)
+  try {
+    await navigator.clipboard.writeText(message);
+    toast('📋 Message copié — colle-le si besoin', 'success');
+  } catch (e) {
+    console.log('Clipboard non dispo');
+  }
+
+  // 2. Tenter WhatsApp Business en premier (URL scheme spécifique)
+  const businessUrl = `whatsapp-business://send?phone=${clean}&text=${encodeURIComponent(message)}`;
+  const fallbackUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+
+  // Créer un iframe caché pour tester le scheme (méthode iOS)
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = businessUrl;
+  document.body.appendChild(iframe);
+
+  // Après 800ms, si toujours sur la page → fallback vers WhatsApp classique
+  let opened = false;
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
+  // Détection : si l'utilisateur quitte la page (WhatsApp Business ouvert), on annule le fallback
+  const visHandler = () => {
+    if (document.hidden) { opened = true; cleanup(); }
+  };
+  document.addEventListener('visibilitychange', visHandler);
+
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', visHandler);
+    cleanup();
+    if (!opened) {
+      // WhatsApp Business non installé ou refus → ouvrir wa.me/ classique
+      window.open(fallbackUrl, '_blank');
+    }
+  }, 800);
+}
+
+function callWhatsApp(tel, type, numDevis, vehicule, montant) {
   const msg = type === 'accepte'
     ? `Bonjour, suite à l'acceptation du devis ${numDevis} pour votre ${vehicule || 'véhicule'} (${formatEUR(montant)}), quand souhaitez-vous nous confier le véhicule ? Larosco Technics — 0696 28 11 05`
     : `Bonjour, je reviens vers vous concernant le devis ${numDevis} pour votre ${vehicule || 'véhicule'} (${formatEUR(montant)}). Avez-vous besoin de précisions ? Larosco Technics — 0696 28 11 05`;
-
-  const url = `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  openWhatsApp(tel, msg);
 }
 
 function callWhatsAppFacture(tel, numFacture, montant) {
-  let clean = tel.replace(/[\s.\-]/g, '');
-  if (clean.startsWith('0')) clean = '596' + clean.substring(1);
   const msg = `Bonjour, je vous rappelle que la facture ${numFacture} d'un montant de ${formatEUR(montant)} reste à régler. Merci de votre retour. Larosco Technics — 0696 28 11 05`;
-  const url = `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  openWhatsApp(tel, msg);
 }
 
 // ═══════════ CALENDRIER IPHONE (fichier .ics) ═══════════
