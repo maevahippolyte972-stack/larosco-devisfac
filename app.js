@@ -1309,11 +1309,26 @@ function toast(msg, type = '') {
 // ═══════════ SUPPRESSION CLIENT ═══════════
 document.getElementById('btn-delete-client').addEventListener('click', async () => {
   if (!currentModalClient) return;
-  if (!(await confirmDialog('Supprimer le client', `${currentModalClient.nom} ? Ses devis et factures resteront.`))) return;
+  if (!(await confirmDialog('Supprimer le client', `${currentModalClient.nom} ? Ses devis et factures resteront (sans nom de client).`))) return;
 
+  // Étape 1 : détacher les devis et factures liés (mettre client_id = null)
+  const { error: e1 } = await sb.from('devis').update({ client_id: null }).eq('client_id', currentModalClient.id);
+  const { error: e2 } = await sb.from('factures').update({ client_id: null }).eq('client_id', currentModalClient.id);
+  if (e1 || e2) {
+    console.error('Erreur détachement:', e1, e2);
+    toast('Erreur : ' + ((e1||e2).message), 'error');
+    return;
+  }
+
+  // Étape 2 : supprimer le client
   const { error } = await sb.from('clients').delete().eq('id', currentModalClient.id);
-  if (error) { toast('Erreur suppression', 'error'); return; }
-  toast('Client supprimé', 'success');
+  if (error) {
+    console.error('Erreur suppression client:', error);
+    toast('Erreur : ' + error.message, 'error');
+    return;
+  }
+
+  toast('Client supprimé ✓', 'success');
   document.getElementById('modal-client').classList.remove('show');
   loadClientsList();
   loadKPIs();
