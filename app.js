@@ -509,11 +509,11 @@ async function generatePDF(type) {
     bodyStyles: { fontSize: 9 },
     alternateRowStyles: { fillColor: [244,246,247] },
     columnStyles: {
-      0: { halign: 'center', fontStyle: 'bold', textColor: [26,58,92], cellWidth: 22 },
-      1: { cellWidth: 80 },
-      2: { halign: 'center', cellWidth: 14 },
-      3: { halign: 'right', cellWidth: 25 },
-      4: { halign: 'right', fontStyle: 'bold', cellWidth: 30, fillColor: [235,245,251] }
+      0: { halign: 'center', fontStyle: 'bold', textColor: [26,58,92], cellWidth: 28, overflow: 'visible' },
+      1: { cellWidth: 68, overflow: 'linebreak' },
+      2: { halign: 'center', cellWidth: 12 },
+      3: { halign: 'right', cellWidth: 28, overflow: 'visible' },
+      4: { halign: 'right', fontStyle: 'bold', cellWidth: 35, fillColor: [235,245,251], overflow: 'visible' }
     },
     margin: { left: M, right: M }
   });
@@ -526,11 +526,11 @@ async function generatePDF(type) {
     const fgV = opts.fgV || [17, 17, 17];
     const h = opts.h || 7;
     doc.setFillColor(...bgL);
-    doc.rect(M, y, W - 2*M - 30, h, 'F');
+    doc.rect(M, y, W - 2*M - 40, h, 'F');
     doc.setFillColor(...bgV);
-    doc.rect(W - M - 30, y, 30, h, 'F');
+    doc.rect(W - M - 40, y, 40, h, 'F');
     doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(9);
-    doc.text(label, W - M - 32, y + h/2 + 1.5, { align: 'right' });
+    doc.text(label, W - M - 42, y + h/2 + 1.5, { align: 'right' });
     doc.setTextColor(...fgV).setFont('helvetica', opts.bold ? 'bold' : 'normal').setFontSize(opts.size || 9);
     doc.text(value, W - M - 1.5, y + h/2 + 1.5, { align: 'right' });
     y += h;
@@ -543,11 +543,11 @@ async function generatePDF(type) {
 
   const ttcLabel = remisePct > 0 ? 'TTC (avant remise)' : 'TOTAL TTC';
   doc.setFillColor(17, 17, 17);
-  doc.rect(M, y, W - 2*M - 35, 10, 'F');
+  doc.rect(M, y, W - 2*M - 45, 10, 'F');
   doc.setFillColor(192, 57, 43);
-  doc.rect(W - M - 35, y, 35, 10, 'F');
+  doc.rect(W - M - 45, y, 45, 10, 'F');
   doc.setTextColor(255, 255, 255).setFont('helvetica', 'bold').setFontSize(12);
-  doc.text(ttcLabel, W - M - 37, y + 7, { align: 'right' });
+  doc.text(ttcLabel, W - M - 47, y + 7, { align: 'right' });
   doc.setFontSize(13);
   doc.text(formatEUR(ttcAvant), W - M - 2, y + 7, { align: 'right' });
   y += 12;
