@@ -580,7 +580,16 @@ async function generatePDF(type) {
   doc.setFont('helvetica', 'normal').setFontSize(7.5);
   doc.text('Diagnostic obligatoire avant travaux — 50% déduit si réalisés.', M, y); y += 3.5;
   doc.text('Pièces fournies par le client (origine OE / équipementier / adaptable).', M, y); y += 3.5;
-  doc.text('Garantie main d\'œuvre : 6 mois ou 10 000 km (premier atteint).', M, y); y += 3.5;
+  doc.text('Garantie main d\'oeuvre : 6 mois ou 6 000 km (premier atteint).', M, y); y += 4;
+  doc.setTextColor(192, 57, 43).setFont('helvetica', 'bold').setFontSize(8);
+  doc.text('EXCLUSIONS DE GARANTIE :', M, y); y += 3.5;
+  doc.setTextColor(120, 120, 120).setFont('helvetica', 'normal').setFontSize(7.5);
+  doc.text('• Pieces fournies par le client (origine OE / equipementier / adaptable)', M, y); y += 3;
+  doc.text('• Defauts d\'entretien anterieurs (huiles, filtres, courroies non suivis)', M, y); y += 3;
+  doc.text('• Usage abusif (competition, remorquage excessif, surcharge)', M, y); y += 3;
+  doc.text('• Modifications du vehicule apres reparation (tuning, kit performance)', M, y); y += 3;
+  doc.text('• Intervention d\'un tiers apres notre reparation', M, y); y += 3;
+  doc.text('• Sinistre, accident, catastrophe naturelle, incendie, vol', M, y); y += 3;
   doc.text('Paiement : espèces, chèque, virement bancaire, CB.', M, y); y += 3.5;
   if (!isFacture) {
     doc.text('Devis valable 30 jours.', M, y);
@@ -1677,3 +1686,179 @@ async function saveAsDraft() {
 // Brancher le bouton "Enregistrer brouillon" qui existait déjà dans HTML
 const btnSaveDraft = document.getElementById('btn-save-draft');
 if (btnSaveDraft) btnSaveDraft.addEventListener('click', saveAsDraft);
+
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPTABILITÉ
+// ═══════════════════════════════════════════════════════════════════
+
+const TAUX_TVA = 0.085;
+// Taux URSSAF officiels pour Larosco (DOM Martinique, BIC services artisanat, période 1) :
+// - Cotisations sociales : 3,60%
+// - Contribution Formation Pro (CFP) : 0,30%
+// - Total prélevé par l'URSSAF : 3,90%
+const TAUX_COTIS = 0.036;   // Cotisations sociales seules
+const TAUX_CFP = 0.003;     // Formation pro obligatoire
+const TAUX_URSSAF = TAUX_COTIS + TAUX_CFP; // Total URSSAF = 3,90%
+
+const MOIS_LABELS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+// Hook : quand on entre dans l'écran compta
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-screen="compta"]');
+  if (btn) initCompta();
+});
+
+async function initCompta() {
+  // Remplir sélecteur années (de 2025 à année courante)
+  const select = document.getElementById('compta-annee');
+  const yearNow = new Date().getFullYear();
+  if (!select.options.length) {
+    for (let y = yearNow; y >= 2025; y--) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      select.appendChild(opt);
+    }
+    select.value = yearNow;
+    select.addEventListener('change', loadComptaData);
+  }
+  await loadComptaData();
+}
+
+async function loadComptaData() {
+  const annee = parseInt(document.getElementById('compta-annee').value);
+  const start = `${annee}-01-01`;
+  const end = `${annee}-12-31`;
+
+  // 1. Factures payées de l'année
+  const { data: factures } = await sb.from('factures')
+    .select('date_emission, total_ht, statut_paiement, clients(nom)')
+    .gte('date_emission', start).lte('date_emission', end)
+    .eq('statut_paiement', 'paye');
+
+  // 2. Factures historiques de l'année
+  const { data: historiques } = await sb.from('factures_historiques')
+    .select('*')
+    .gte('date_emission', start).lte('date_emission', end);
+
+  // Agréger par mois
+  const moisData = Array.from({length: 12}, () => ({ ca_ht: 0, nb: 0 }));
+
+  (factures || []).forEach(f => {
+    const m = new Date(f.date_emission).getMonth();
+    moisData[m].ca_ht += parseFloat(f.total_ht) || 0;
+    moisData[m].nb += 1;
+  });
+  (historiques || []).forEach(h => {
+    const m = new Date(h.date_emission).getMonth();
+    moisData[m].ca_ht += parseFloat(h.total_ht) || 0;
+    moisData[m].nb += 1;
+  });
+
+  // Totaux annuels
+  const caHt = moisData.reduce((s, m) => s + m.ca_ht, 0);
+  const tva = caHt * TAUX_TVA;
+  const urssaf = caHt * TAUX_URSSAF;
+  const etat = tva + urssaf;
+  const benefice = caHt - urssaf; // TVA déjà incluse dans le facturé client, donc on enlève juste les cotisations
+
+  document.getElementById('compta-ca-annuel').textContent = formatEUR(caHt);
+  document.getElementById('compta-ca-ht').textContent = formatEUR(caHt);
+  document.getElementById('compta-tva').textContent = formatEUR(tva);
+  document.getElementById('compta-urssaf').textContent = formatEUR(urssaf);
+  document.getElementById('compta-etat').textContent = formatEUR(etat);
+  document.getElementById('compta-benefice').textContent = formatEUR(benefice);
+
+  // Détail par mois
+  const moisCt = document.getElementById('compta-mois-list');
+  moisCt.innerHTML = moisData.map((m, idx) => {
+    if (m.nb === 0 && m.ca_ht === 0) return '';
+    const isCurrent = (annee === new Date().getFullYear() && idx === new Date().getMonth());
+    return `<div class="mois-row${isCurrent ? ' mois-current' : ''}">
+      <div class="mois-name">${MOIS_LABELS[idx]}</div>
+      <div class="mois-stats">
+        <span class="mois-nb">${m.nb} fact.</span>
+        <span class="mois-ca">${formatEUR(m.ca_ht)}</span>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('') || '<div class="empty-state"><div class="text">Aucune facture enregistrée pour ' + annee + '</div></div>';
+}
+
+// ═══════════ MODAL FACTURE HISTORIQUE ═══════════
+let currentEditingFactHist = null;
+
+function openFactHistModal(facture = null) {
+  currentEditingFactHist = facture;
+  document.getElementById('modal-fact-hist-title').textContent = facture ? 'Modifier facture historique' : 'Nouvelle facture historique';
+  document.getElementById('fact-hist-edit-actions').style.display = facture ? 'flex' : 'none';
+
+  if (facture) {
+    document.getElementById('fact-hist-date').value = facture.date_emission;
+    document.getElementById('fact-hist-client').value = facture.client_nom;
+    document.getElementById('fact-hist-ht').value = facture.total_ht;
+    document.getElementById('fact-hist-notes').value = facture.notes || '';
+  } else {
+    document.getElementById('fact-hist-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('fact-hist-client').value = '';
+    document.getElementById('fact-hist-ht').value = '';
+    document.getElementById('fact-hist-notes').value = '';
+  }
+  document.getElementById('modal-fact-historique').classList.add('show');
+}
+
+document.getElementById('btn-add-fact-historique').addEventListener('click', () => openFactHistModal(null));
+document.getElementById('modal-fact-hist-close').addEventListener('click', () => {
+  document.getElementById('modal-fact-historique').classList.remove('show');
+});
+document.getElementById('btn-cancel-fact-hist').addEventListener('click', () => {
+  document.getElementById('modal-fact-historique').classList.remove('show');
+});
+document.getElementById('modal-fact-historique').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-fact-historique') document.getElementById('modal-fact-historique').classList.remove('show');
+});
+
+document.getElementById('btn-save-fact-hist').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-save-fact-hist');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const oldTxt = btn.textContent;
+  btn.textContent = 'Enregistrement...';
+
+  const date = document.getElementById('fact-hist-date').value;
+  const client = document.getElementById('fact-hist-client').value.trim();
+  const ht = parseFloat(document.getElementById('fact-hist-ht').value);
+  const notes = document.getElementById('fact-hist-notes').value.trim();
+
+  if (!date || !client || !ht) {
+    toast('Date, client et montant obligatoires', 'error');
+    btn.disabled = false; btn.textContent = oldTxt;
+    return;
+  }
+
+  const data = { date_emission: date, client_nom: client, total_ht: ht, notes };
+
+  if (currentEditingFactHist) {
+    const { error } = await sb.from('factures_historiques').update(data).eq('id', currentEditingFactHist.id);
+    if (error) { toast('Erreur : ' + error.message, 'error'); btn.disabled = false; btn.textContent = oldTxt; return; }
+    toast('Facture mise à jour ✓', 'success');
+  } else {
+    const { error } = await sb.from('factures_historiques').insert(data);
+    if (error) { toast('Erreur : ' + error.message, 'error'); btn.disabled = false; btn.textContent = oldTxt; return; }
+    toast('Facture historique ajoutée ✓', 'success');
+  }
+
+  btn.disabled = false; btn.textContent = oldTxt;
+  document.getElementById('modal-fact-historique').classList.remove('show');
+  await loadComptaData();
+});
+
+document.getElementById('btn-delete-fact-hist').addEventListener('click', async () => {
+  if (!currentEditingFactHist) return;
+  if (!(await confirmDialog('Supprimer cette facture historique', `${currentEditingFactHist.client_nom} — ${formatEUR(currentEditingFactHist.total_ht)} ?`))) return;
+  const { error } = await sb.from('factures_historiques').delete().eq('id', currentEditingFactHist.id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  toast('Facture supprimée', 'success');
+  document.getElementById('modal-fact-historique').classList.remove('show');
+  await loadComptaData();
+});
