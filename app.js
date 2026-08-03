@@ -1877,3 +1877,213 @@ document.getElementById('btn-delete-fact-hist').addEventListener('click', async 
   document.getElementById('modal-fact-historique').classList.remove('show');
   await loadComptaData();
 });
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ONGLET "À FAIRE" — Organisation
+// ═══════════════════════════════════════════════════════════════════
+
+// Hook au clic sur bouton À faire
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-screen="todo"]');
+  if (btn) loadTodo();
+});
+
+async function loadTodo() {
+  // 1. Devis acceptés (statut = accepte) sans facture générée
+  const { data: devisAcceptes } = await sb.from('devis')
+    .select('*, clients(nom, telephone)')
+    .eq('statut', 'accepte')
+    .order('date_emission', { ascending: false });
+
+  const ct1 = document.getElementById('todo-devis-acceptes');
+  ct1.innerHTML = (devisAcceptes || []).length === 0
+    ? '<div class="empty-state"><div class="text">Aucun devis accepté en attente</div></div>'
+    : devisAcceptes.map(d => renderTodoItem(d, 'accepte')).join('');
+
+  // 2. Devis envoyés depuis + de 7 jours (à relancer)
+  const septJoursAgo = new Date();
+  septJoursAgo.setDate(septJoursAgo.getDate() - 7);
+  const { data: devisEnvoyes } = await sb.from('devis')
+    .select('*, clients(nom, telephone)')
+    .eq('statut', 'envoye')
+    .lte('date_emission', septJoursAgo.toISOString().split('T')[0])
+    .order('date_emission', { ascending: true });
+
+  const ct2 = document.getElementById('todo-devis-envoyes');
+  ct2.innerHTML = (devisEnvoyes || []).length === 0
+    ? '<div class="empty-state"><div class="text">Aucun devis à relancer</div></div>'
+    : devisEnvoyes.map(d => renderTodoItem(d, 'envoye')).join('');
+
+  // 3. Factures impayées
+  const { data: facturesImpayees } = await sb.from('factures')
+    .select('*, clients(nom, telephone)')
+    .in('statut_paiement', ['impaye', 'partiel'])
+    .order('date_emission', { ascending: false });
+
+  const ct3 = document.getElementById('todo-factures-impayees');
+  ct3.innerHTML = (facturesImpayees || []).length === 0
+    ? '<div class="empty-state"><div class="text">Aucune facture impayée 🎉</div></div>'
+    : facturesImpayees.map(f => renderTodoFacture(f)).join('');
+
+  // Badge sur bouton accueil
+  updateTodoBadge((devisAcceptes||[]).length + (devisEnvoyes||[]).length + (facturesImpayees||[]).length);
+}
+
+function renderTodoItem(devis, type) {
+  const clientNom = devis.clients?.nom || '—';
+  const tel = devis.clients?.telephone || '';
+  const veh = devis.vehicule_nom ? devis.vehicule_nom + (devis.vehicule_immat ? ' · ' + devis.vehicule_immat : '') : '';
+  const dateStr = new Date(devis.date_emission).toLocaleDateString('fr-FR');
+  const joursDepuis = Math.floor((Date.now() - new Date(devis.date_emission).getTime()) / (1000*60*60*24));
+
+  return `<div class="todo-item">
+    <div class="todo-info">
+      <div class="todo-title">${devis.numero} · ${clientNom}</div>
+      <div class="todo-sub">${veh || '&nbsp;'}</div>
+      <div class="todo-date">📅 ${dateStr} · <span style="color:var(--accent)">${formatEUR(devis.total_ttc)}</span> · <span style="color:var(--text-3)">il y a ${joursDepuis}j</span></div>
+    </div>
+    <div class="todo-actions">
+      ${tel ? `<button class="btn-mini-icon" onclick="callWhatsApp('${tel}', 'devis', '${devis.numero}', '${veh}', ${devis.total_ttc})" title="Relancer WhatsApp">💬</button>` : ''}
+      ${type === 'accepte' ? `<button class="btn-mini-icon" onclick="createCalendarEvent('${devis.numero}', '${clientNom.replace(/'/g,"\\'")}', '${veh.replace(/'/g,"\\'")}')" title="Programmer RDV">📅</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderTodoFacture(facture) {
+  const clientNom = facture.clients?.nom || '—';
+  const tel = facture.clients?.telephone || '';
+  const dateStr = new Date(facture.date_emission).toLocaleDateString('fr-FR');
+  const echStr = facture.date_echeance ? new Date(facture.date_echeance).toLocaleDateString('fr-FR') : '—';
+  const enRetard = facture.date_echeance && new Date(facture.date_echeance) < new Date();
+
+  return `<div class="todo-item ${enRetard ? 'todo-urgent' : ''}">
+    <div class="todo-info">
+      <div class="todo-title">${facture.numero} · ${clientNom} ${enRetard ? '⚠️' : ''}</div>
+      <div class="todo-sub">Émise le ${dateStr}</div>
+      <div class="todo-date">Échéance : ${echStr} · <span style="color:var(--accent)">${formatEUR(facture.total_ttc)}</span></div>
+    </div>
+    <div class="todo-actions">
+      ${tel ? `<button class="btn-mini-icon" onclick="callWhatsAppFacture('${tel}', '${facture.numero}', ${facture.total_ttc})" title="Relancer paiement">💬</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function updateTodoBadge(count) {
+  const badge = document.getElementById('badge-todo');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ═══════════ WHATSAPP RELANCE ═══════════
+function callWhatsApp(tel, type, numDevis, vehicule, montant) {
+  // Nettoyer téléphone (retirer espaces, points, tirets)
+  let clean = tel.replace(/[\s.\-]/g, '');
+  // Ajouter 596 si commence par 0 (Martinique)
+  if (clean.startsWith('0')) clean = '596' + clean.substring(1);
+
+  const msg = type === 'accepte'
+    ? `Bonjour, suite à l'acceptation du devis ${numDevis} pour votre ${vehicule || 'véhicule'} (${formatEUR(montant)}), quand souhaitez-vous nous confier le véhicule ? Larosco Technics — 0696 28 11 05`
+    : `Bonjour, je reviens vers vous concernant le devis ${numDevis} pour votre ${vehicule || 'véhicule'} (${formatEUR(montant)}). Avez-vous besoin de précisions ? Larosco Technics — 0696 28 11 05`;
+
+  const url = `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
+function callWhatsAppFacture(tel, numFacture, montant) {
+  let clean = tel.replace(/[\s.\-]/g, '');
+  if (clean.startsWith('0')) clean = '596' + clean.substring(1);
+  const msg = `Bonjour, je vous rappelle que la facture ${numFacture} d'un montant de ${formatEUR(montant)} reste à régler. Merci de votre retour. Larosco Technics — 0696 28 11 05`;
+  const url = `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
+// ═══════════ CALENDRIER IPHONE (fichier .ics) ═══════════
+function createCalendarEvent(numDevis, clientNom, vehicule) {
+  // Ouvrir un petit modal pour saisir la date/heure du RDV
+  const date = prompt('Date et heure du RDV (format : JJ/MM/AAAA HH:MM)\n\nExemple : 15/08/2026 09:00', '');
+  if (!date) return;
+
+  const match = date.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+  if (!match) { toast('Format invalide. Ex: 15/08/2026 09:00', 'error'); return; }
+
+  const [_, jour, mois, annee, heure, minute] = match;
+  const start = new Date(annee, mois - 1, jour, heure, minute);
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // durée 1h
+
+  const fmt = (d) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Larosco Technics//RDV//FR
+BEGIN:VEVENT
+UID:${numDevis}-${Date.now()}@larosco.mq
+DTSTAMP:${fmt(new Date())}
+DTSTART:${fmt(start)}
+DTEND:${fmt(end)}
+SUMMARY:RDV ${clientNom} - ${vehicule || 'Véhicule'}
+DESCRIPTION:Devis ${numDevis}\\nClient: ${clientNom}\\nVéhicule: ${vehicule || '-'}
+LOCATION:Larosco Technics, Case-Pilote
+BEGIN:VALARM
+TRIGGER:-PT1H
+ACTION:DISPLAY
+DESCRIPTION:Rappel RDV Larosco dans 1h
+END:VALARM
+BEGIN:VALARM
+TRIGGER:-P1D
+ACTION:DISPLAY
+DESCRIPTION:Rappel RDV Larosco demain
+END:VALARM
+END:VEVENT
+END:VCALENDAR`;
+
+  const blob = new Blob([ics], { type: 'text/calendar' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `RDV_${numDevis}_${clientNom.replace(/[^a-z0-9]/gi, '_')}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Ouverture du Calendrier iPhone...', 'success');
+}
+
+// Boutons dans modal devis
+document.getElementById('btn-whatsapp-devis').addEventListener('click', () => {
+  if (!currentModalDevis) return;
+  const tel = currentModalDevis.clients?.telephone;
+  if (!tel) { toast('Aucun téléphone renseigné pour ce client', 'error'); return; }
+  const veh = currentModalDevis.vehicule_nom || '';
+  callWhatsApp(tel, currentModalDevis.statut === 'accepte' ? 'accepte' : 'envoye',
+               currentModalDevis.numero, veh, currentModalDevis.total_ttc);
+});
+
+document.getElementById('btn-calendar-devis').addEventListener('click', () => {
+  if (!currentModalDevis) return;
+  const clientNom = currentModalDevis.clients?.nom || 'Client';
+  const veh = currentModalDevis.vehicule_nom || '';
+  createCalendarEvent(currentModalDevis.numero, clientNom, veh);
+});
+
+// Charger le badge à l'accueil
+async function updateBadges() {
+  const { count: c1 } = await sb.from('devis').select('*', { count: 'exact', head: true }).eq('statut', 'accepte');
+  const septJoursAgo = new Date();
+  septJoursAgo.setDate(septJoursAgo.getDate() - 7);
+  const { count: c2 } = await sb.from('devis').select('*', { count: 'exact', head: true })
+    .eq('statut', 'envoye').lte('date_emission', septJoursAgo.toISOString().split('T')[0]);
+  const { count: c3 } = await sb.from('factures').select('*', { count: 'exact', head: true })
+    .in('statut_paiement', ['impaye', 'partiel']);
+  updateTodoBadge((c1||0) + (c2||0) + (c3||0));
+}
+
+// Hook sur loadKPIs pour aussi mettre à jour le badge
+const _origLoadKPIs = loadKPIs;
+loadKPIs = async function() {
+  await _origLoadKPIs();
+  await updateBadges();
+};
