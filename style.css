@@ -940,3 +940,40 @@ html, body {
   color: white;
   transform: scale(0.95);
 }
+
+
+/* ═════ COMPTA — Détail par mois ═════ */
+.mois-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin: 4px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.mois-current {
+  background: rgba(232, 103, 10, 0.1);
+  border-color: var(--accent);
+}
+.mois-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.mois-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.mois-nb {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.mois-ca {
+  font-weight: 700;
+  color: var(--accent);
+}
